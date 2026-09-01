@@ -2,6 +2,27 @@
 
 JOBOLE向け広告画像を、**VSCode Codex Chief Creative Officer + Claude 3専門家 + Python画像/ファイル処理**で制作するPhase 1構成です。
 
+## 最終ユーザー体験
+ユーザーから送るものは原則これだけです。
+
+必須:
+- 求人ファイル
+
+任意:
+- ヒアリングシート
+- 補足テキスト
+
+**求人ファイル1つだけでも画像生成まで進めます。**
+
+求人ファイルが正常に読める限り、ヒアリングや補足テキストが無いことを理由に制作を止めません。
+
+## 未指定時のPhase 1既定値
+- 制作枚数: 1枚
+- サイズ: 1200x628
+- 目的: 求人広告画像
+
+ユーザーに案件ID、manifest、設定JSON、参考画像、Pythonコマンド等を要求しないことを標準とします。
+
 ## Phase 1の目的
 まず実求人1件から1〜3枚を作り、AIチームのクリエイティブ品質を人間が評価できる状態にする。
 
@@ -9,6 +30,7 @@ JOBOLE向け広告画像を、**VSCode Codex Chief Creative Officer + Claude 3�
 - 求人理解
 - ターゲット理解
 - コピー品質
+- 日本語テキストの正確性
 - ビジュアル品質
 - 広告としての訴求力
 - 人間制作物との比較
@@ -16,6 +38,9 @@ JOBOLE向け広告画像を、**VSCode Codex Chief Creative Officer + Claude 3�
 ## AI組織
 ```text
 Human
+求人ファイル [必須]
++ ヒアリング [任意]
++ 補足テキスト [任意]
 ↓
 VSCode Codex = Chief Creative Officer / 最高責任者
 │
@@ -24,7 +49,7 @@ VSCode Codex = Chief Creative Officer / 最高責任者
 └─ Claude Creative Reviewer
 ```
 
-Codexは3専門家を統括し、求人事実確認・クリエイティブ方針承認・差し戻し・最終QAを行う。
+Codexは3専門家を統括し、求人事実確認・クリエイティブ方針承認・コピー確定・差し戻し・最終QAを行います。
 
 ## 標準フロー
 ```text
@@ -38,10 +63,14 @@ Codex Fact Check
 ↓
 Claude Creative Director
 ↓
-Codex Direction Approval
+Codex Direction Approval / 日本語コピー確定
 ↓
 Python / Image Tool
-画像生成・文字入れ・サイズ調整・保存
+文字なし背景生成
+↓
+Python日本語overlay
+↓
+完成画像 + *-copy.md
 ↓
 Claude Creative Reviewer
 ↓
@@ -55,15 +84,17 @@ Human Final Approval
 - PythonからCodexを再度呼び出してCCOを二重化しない。
 - ClaudeはPythonオーケストレーターではなく、Codexが直接Claude Codeで呼ぶ。
 - Pythonは判断をしない。画像・ファイルの機械処理だけを行う。
+- ヒアリング不足だけで制作を止めない。
+- 求人事実は推測しないが、人物・背景・構図・トーン等は安全なcreative assumptionを使ってよい。
 - Phase 1ではProduction / Copy / Art / Promptの4Agent分割を使わない。Creative Directorへ統合する。
 - 大量JSON Schemaや4段階の細かいQuality GateはPhase 1本流から外す。
 
 ## 3専門家
 ### Recruitment Analyst
-求人原稿から事実だけを整理し、Fact Sheetを作る。
+求人ファイルから事実だけを整理し、Fact Sheetを作る。ヒアリングが無くても処理を完了する。
 
 ### Creative Director
-Fact Sheetと依頼内容から以下を一体設計する。
+Fact Sheetと、存在する場合のみヒアリング/補足テキストから以下を一体設計する。
 - Target
 - Key Message
 - 訴求優先順位
@@ -73,18 +104,68 @@ Fact Sheetと依頼内容から以下を一体設計する。
 - Image Prompt
 - Overlay Text
 
+求人ファイルだけでも案を完成させる。
+
 ### Creative Reviewer
-完成画像を独立レビューし、PASS / REVISION / REDESIGNと具体的な問題をCodexへ返す。
+完成画像と `*-copy.md` を独立レビューし、PASS / REVISION / REDESIGNと具体的な問題をCodexへ返す。
+
+## 日本語テキストの扱い
+求人広告で重要な日本語コピーは画像生成AIへ描かせません。
+
+```text
+画像AI
+→ 人物・背景・構図だけ生成
+
+Python
+→ Codexが確定した日本語コピーを正確に後載せ
+```
+
+これにより、AI画像で起こりやすい文字化け・誤字・崩れを避けます。
+
+完成時は必ず以下をセットで出力します。
+
+```text
+creative-01.png
+creative-01-copy.md
+```
+
+`*-copy.md` には画像へ実際に後載せした元文言をそのまま保存します。
+
+確認対象:
+- headline
+- subcopy
+- fact text
+- CTA
+- 数字・単位・記号
 
 ## Pythonの役割
 ### 使用する
-- `scripts/create_project_from_intake.py`: 案件フォルダ作成・素材コピー
+- `scripts/create_project_from_intake.py`: 求人/任意ヒアリング/任意テキストから案件作成
 - `scripts/input_loader.py`: 入力テキスト整理
+- `scripts/generate_creative.py`: 文字なし画像生成 → 日本語overlay → copy.md保存
 - `services/image_generator.py`: 画像生成実行
-- `services/overlay_renderer.py`: 日本語文字入れ
+- `services/overlay_renderer.py`: 日本語文字入れ・日本語折り返し
 
 ### 使用しない
-`scripts/run_production.py` は旧AIオーケストレーターとしてdeprecated。Phase 1では実行しない。
+`scripts/run_production.py` は旧AIオーケストレーターとしてdeprecated。Phase 1では実行しません。
+
+## 求人ファイルだけの案件で推測してよいもの
+- 人物像
+- 服装
+- 背景
+- 構図
+- 色・トーン
+- カメラ距離
+
+## 推測してはいけないもの
+- 給与
+- 待遇
+- 休日
+- 勤務時間
+- 資格
+- 経験年数
+- 数値実績
+- No.1 / 最短 / 保証等
 
 ## 認証
 - Codex CCO: ChatGPTログイン
@@ -93,11 +174,11 @@ Fact Sheetと依頼内容から以下を一体設計する。
 - OpenAI APIを使う場合: 画像生成だけ
 
 ## 画像生成
-画像生成方式そのものを目的にしない。
+画像生成方式そのものを目的にしません。
 
-Phase 1では「既に動く方法」を優先し、ローカル画像AIのトラブルが品質検証を止める場合はOpenAI Image APIへ切り替えてよい。
+Phase 1では「既に動く方法」を優先し、ローカル画像AIのトラブルが品質検証を止める場合はOpenAI Image APIへ切り替えてよい設計です。
 
-ローカル画像AIは無料テスト用の補助経路として扱う。
+ローカル画像AIは無料テスト用の補助経路として扱います。
 
 ## データ管理
 ```text
@@ -109,10 +190,10 @@ GitHub
 
 Google Drive
 └─ projects/
-   └─ 実案件・求人原稿・参考画像・生成画像・レビュー・納品物
+   └─ 実案件・求人ファイル・ヒアリング・補足テキスト・生成画像・レビュー・納品物
 ```
 
-実案件データや顧客素材をGitHubへコミットしない。
+実案件データや顧客素材をGitHubへコミットしません。
 
 ## 構造確認
 ```powershell
@@ -128,16 +209,6 @@ Claude specialists: 3
 Codex CCO: VSCode highest authority
 Python AI orchestration: DISABLED
 Text API keys required: NO
-```
-
-Claude/Codexログイン確認:
-```powershell
-python scripts/validate_system.py --verify-login
-```
-
-画像バックエンド確認は必要な場合だけ:
-```powershell
-python scripts/validate_system.py --verify-image
 ```
 
 ## Phase 2以降
