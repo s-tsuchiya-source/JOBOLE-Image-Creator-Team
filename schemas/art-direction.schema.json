@@ -2,35 +2,48 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ArtDirection",
   "type": "object",
-  "required": ["creative_group_id", "selected_copy_id", "visual_concept", "composition", "copy_safe_area", "size_variations"],
+  "required": ["creative_group_id", "selected_copy_id", "candidates", "selected_art", "selection_reason"],
   "properties": {
     "creative_group_id": {"type": "string"},
     "selected_copy_id": {"type": "string"},
-    "visual_concept": {"type": "string"},
-    "composition": {"type": "string"},
-    "subject": {"type": ["string", "null"]},
-    "expression": {"type": ["string", "null"]},
-    "camera": {"type": ["string", "null"]},
-    "background": {"type": ["string", "null"]},
-    "lighting": {"type": ["string", "null"]},
-    "color_tone": {"type": ["string", "null"]},
-    "typography_zone": {"type": "string"},
-    "copy_safe_area": {"type": "string"},
-    "focal_point": {"type": "string"},
-    "hierarchy": {"type": "array", "items": {"type": "string"}},
-    "negative_space": {"type": ["string", "null"]},
-    "do_not_include": {"type": "array", "items": {"type": "string"}},
-    "size_variations": {
+    "candidates": {
       "type": "array",
+      "minItems": 2,
       "items": {
         "type": "object",
-        "required": ["format", "layout_instruction"],
+        "required": ["art_id", "visual_concept", "composition", "copy_safe_area", "size_variations"],
         "properties": {
-          "format": {"type": "string"},
-          "layout_instruction": {"type": "string"}
+          "art_id": {"type": "string"},
+          "visual_concept": {"type": "string"},
+          "composition": {"type": "string"},
+          "subject": {"type": ["string", "null"]},
+          "expression": {"type": ["string", "null"]},
+          "camera": {"type": ["string", "null"]},
+          "background": {"type": ["string", "null"]},
+          "lighting": {"type": ["string", "null"]},
+          "color_tone": {"type": ["string", "null"]},
+          "typography_zone": {"type": "string"},
+          "copy_safe_area": {"type": "string"},
+          "focal_point": {"type": "string"},
+          "hierarchy": {"type": "array", "items": {"type": "string"}},
+          "negative_space": {"type": ["string", "null"]},
+          "do_not_include": {"type": "array", "items": {"type": "string"}},
+          "size_variations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["format", "layout_instruction"],
+              "properties": {
+                "format": {"type": "string"},
+                "layout_instruction": {"type": "string"}
+              }
+            }
+          }
         }
       }
-    }
+    },
+    "selected_art": {"type": "string"},
+    "selection_reason": {"type": "string"}
   },
   "additionalProperties": false
 }
