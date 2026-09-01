@@ -9,6 +9,16 @@ from pathlib import Path
 from services.providers import ProviderResult
 
 
+REQUIRED_LIVE_COST_ENV = (
+    "USDJPY_RATE",
+    "ANTHROPIC_INPUT_USD_PER_M",
+    "ANTHROPIC_OUTPUT_USD_PER_M",
+    "OPENAI_CCO_INPUT_USD_PER_M",
+    "OPENAI_CCO_OUTPUT_USD_PER_M",
+    "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
+)
+
+
 @dataclass
 class UsageEntry:
     timestamp: str
@@ -26,6 +36,39 @@ def _float_env(name: str) -> float | None:
     if value is None or not value.strip():
         return None
     return float(value)
+
+
+def validate_live_cost_configuration() -> None:
+    """Refuse paid production when budget tracking cannot be calculated."""
+    if os.getenv("PRODUCTION_MODE", "dry-run").lower() != "live":
+        return
+
+    missing: list[str] = []
+    invalid: list[str] = []
+    for name in REQUIRED_LIVE_COST_ENV:
+        raw = os.getenv(name)
+        if raw is None or not raw.strip():
+            missing.append(name)
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            invalid.append(f"{name}={raw!r}")
+            continue
+        if value <= 0:
+            invalid.append(f"{name}={raw!r}")
+
+    if missing or invalid:
+        details = []
+        if missing:
+            details.append("未設定: " + ", ".join(missing))
+        if invalid:
+            details.append("0より大きい数値が必要: " + ", ".join(invalid))
+        raise SystemExit(
+            "live productionを開始できません。400円/枚の予算ガードに必要な料金設定が不完全です。\n"
+            + "\n".join(details)
+            + "\n.env を設定してから再実行してください。API呼び出しはまだ行われていません。"
+        )
 
 
 def estimate_text_cost_yen(result: ProviderResult) -> float | None:
@@ -51,6 +94,8 @@ def estimate_text_cost_yen(result: ProviderResult) -> float | None:
 
 class UsageTracker:
     def __init__(self, project_dir: Path):
+        # This runs before the first paid provider call in run_production.py.
+        validate_live_cost_configuration()
         self.path = project_dir / "04_project_review" / "provider-usage.jsonl"
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
