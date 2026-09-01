@@ -1,44 +1,32 @@
 chief:
   codex_cco:
     file: .codex/chief-creative-officer.md
-    provider: codex_cli
+    role: chief_creative_officer
+    runtime: vscode_codex
     auth: chatgpt_login
-    schema: schemas/quality-gate.schema.json
 
 agents:
   recruitment_analyst:
     file: .claude/agents/recruitment-analyst.md
-    provider: claude_code
+    role: recruitment_fact_analysis
+    runtime: claude_code
     auth: subscription_login
-    schema: schemas/recruitment-analysis.schema.json
-  production_director:
-    file: .claude/agents/production-director.md
-    provider: claude_code
+
+  creative_director:
+    file: .claude/agents/creative-director.md
+    role: strategy_copy_art_prompt
+    runtime: claude_code
     auth: subscription_login
-    schema: schemas/production-plan.schema.json
-  copy_director:
-    file: .claude/agents/copy-director.md
-    provider: claude_code
-    auth: subscription_login
-    schema: schemas/copy-direction.schema.json
-  art_director:
-    file: .claude/agents/art-director.md
-    provider: claude_code
-    auth: subscription_login
-    schema: schemas/art-direction.schema.json
-  prompt_designer:
-    file: .claude/agents/prompt-designer.md
-    provider: claude_code
-    auth: subscription_login
-    schema: schemas/prompt-package.schema.json
+
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
-    provider: claude_code
+    role: independent_final_review
+    runtime: claude_code
     auth: subscription_login
-    schema: schemas/creative-review.schema.json
 
-legacy_aliases:
-  text_director: copy_director
-  image_director: art_director
-  designer: prompt_designer
-  reviewer: creative_reviewer
+legacy_agents:
+  note: "Phase 1では使用しない。Git履歴上は残すが、Codexは呼び出さない。"
+  production_director: .claude/agents/production-director.md
+  copy_director: .claude/agents/copy-director.md
+  art_director: .claude/agents/art-director.md
+  prompt_designer: .claude/agents/prompt-designer.md
