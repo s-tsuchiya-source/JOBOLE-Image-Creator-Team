@@ -29,10 +29,7 @@ def read_text_file(path: Path) -> str:
 
 def extract_csv(path: Path) -> str:
     text = read_text_file(path)
-    rows = []
-    for row in csv.reader(text.splitlines()):
-        rows.append("\t".join(row))
-    return "\n".join(rows)
+    return "\n".join("\t".join(row) for row in csv.reader(text.splitlines()))
 
 
 def extract_json(path: Path) -> str:
@@ -147,9 +144,7 @@ def normalize_project_inputs(project_dir: Path) -> dict:
             if path.suffix.lower() not in SUPPORTED_SOURCE_EXTENSIONS:
                 item["status"] = "unsupported"
                 index[category].append(item)
-                index["errors"].append(
-                    f"未対応形式: {relative}"
-                )
+                index["errors"].append(f"未対応形式: {relative}")
                 continue
             try:
                 text = extract_source_text(path).strip()
@@ -196,12 +191,18 @@ def normalize_project_inputs(project_dir: Path) -> dict:
     loaded_jobs = sum(item.get("status") == "loaded" for item in index["job_posting"])
     loaded_hearing = sum(item.get("status") == "loaded" for item in index["hearing"])
 
+    # A job posting is the only mandatory source. Hearing information is optional;
+    # specialist agents must request clarification only when missing information
+    # materially blocks production.
+    ready = loaded_jobs > 0 and not index["errors"]
+
     return {
         "source_bundle": str(bundle_path),
         "source_index": str(index_path),
         "job_posting_count": loaded_jobs,
         "hearing_count": loaded_hearing,
+        "hearing_provided": loaded_hearing > 0,
         "reference_count": len(index["references"]),
         "errors": index["errors"],
-        "ready": loaded_jobs > 0 and loaded_hearing > 0 and not index["errors"],
+        "ready": ready,
     }
