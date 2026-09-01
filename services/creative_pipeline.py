@@ -71,7 +71,11 @@ def produce_creatives(
     reviewer_pass = float(quality.get("reviewer_pass_score", 90))
     final_pass = float(quality.get("final_gate_pass_score", 92))
     max_revisions = int(quality.get("max_revision_count", 3))
-    stop_yen = float((quality.get("budget") or {}).get("stop_and_escalate_yen_per_final_image", 450))
+    budget = quality.get("budget") or {}
+    stop_yen = float(budget.get("stop_and_escalate_yen_per_final_image", 400))
+    revision_ceiling_yen = float(
+        budget.get("do_not_start_another_revision_at_or_above_yen", 330)
+    )
 
     manifest_path = project_dir / "creative-manifest.csv"
     rows = load_rows(manifest_path)
@@ -105,7 +109,9 @@ def produce_creatives(
             row["revision_count"] = str(attempt)
             direction = directions[group_id]
             prompt_package = direction["prompt_package"]
-            width, height = parse_dimensions(row.get("format", ""), row.get("width", ""), row.get("height", ""))
+            width, height = parse_dimensions(
+                row.get("format", ""), row.get("width", ""), row.get("height", "")
+            )
 
             batch_id = row.get("batch_id") or "B001"
             generated_dir = project_dir / "03_batches" / batch_id / creative_id / "generated"
@@ -192,7 +198,7 @@ def produce_creatives(
                     write_rows(manifest_path, rows)
                     raise PipelineStop(
                         "needs_human_review",
-                        f"{creative_id} reached cost guard: {estimated_cost:.2f} JPY",
+                        f"{creative_id} reached the hard cost ceiling: {estimated_cost:.2f} JPY",
                     )
 
             row["claude_score"] = f"{claude_score:.1f}"
@@ -214,6 +220,22 @@ def produce_creatives(
                 write_rows(manifest_path, rows)
                 break
 
+            # Do not spend on another automatic revision once the current estimated
+            # cost is already near the 400 JPY hard ceiling.
+            if estimated_cost is not None and estimated_cost >= revision_ceiling_yen:
+                row["status"] = "needs_human_review"
+                row["review_status"] = "budget_revision_guard"
+                row["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                write_rows(manifest_path, rows)
+                raise PipelineStop(
+                    "needs_human_review",
+                    (
+                        f"{creative_id} is not yet approved and costs {estimated_cost:.2f} JPY. "
+                        f"Another automatic revision is blocked at {revision_ceiling_yen:.2f} JPY "
+                        "to protect the 400 JPY/final-image ceiling."
+                    ),
+                )
+
             if attempt >= max_revisions:
                 row["status"] = "needs_human_review"
                 row["review_status"] = "revision_limit"
@@ -229,7 +251,11 @@ def produce_creatives(
                 row["status"] = "needs_human_review"
                 row["review_status"] = "upstream_error"
                 write_rows(manifest_path, rows)
-                decision = "needs_clarification" if "missing_information" in codes else "needs_human_review"
+                decision = (
+                    "needs_clarification"
+                    if "missing_information" in codes
+                    else "needs_human_review"
+                )
                 raise PipelineStop(
                     decision,
                     f"{creative_id} found upstream issue after generation: {revision_feedback}",
