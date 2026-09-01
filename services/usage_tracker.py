@@ -30,15 +30,22 @@ def _float_env(name: str) -> float | None:
 
 
 def validate_live_cost_configuration() -> None:
-    """Validate only the image backend that can create incremental API spend.
-
-    Codex CCO and Claude specialists run through subscription-authenticated local
-    CLIs and therefore do not require token pricing or text API keys.
-    """
+    """Validate only the image backend that can create incremental API spend."""
     if os.getenv("PRODUCTION_MODE", "dry-run").lower() != "live":
         return
-    backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
-    if backend in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+    backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
+    local_backends = {
+        "local",
+        "local_webui",
+        "webui",
+        "forge",
+        "automatic1111",
+        "openvino",
+        "openvino_ovms",
+        "ovms",
+        "intel_openvino",
+    }
+    if backend in local_backends:
         return
     if backend not in {"openai", "openai_api"}:
         raise SystemExit(f"Unsupported IMAGE_BACKEND={backend!r}")
@@ -108,7 +115,18 @@ class UsageTracker:
         count: int = 1,
     ) -> UsageEntry:
         normalized = provider.strip().lower()
-        if normalized in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+        local_providers = {
+            "local",
+            "local_webui",
+            "webui",
+            "forge",
+            "automatic1111",
+            "openvino",
+            "openvino_ovms",
+            "ovms",
+            "intel_openvino",
+        }
+        if normalized in local_providers:
             cost = 0.0
             billing_mode = "local_compute"
         elif normalized in {"openai", "openai_api", "openai_image_api"}:
