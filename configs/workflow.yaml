@@ -1,0 +1,14 @@
+workflow:
+  steps:
+    - new_order
+    - production_direction
+    - text_direction
+    - image_direction
+    - prompt_design
+    - image_generation
+    - review
+    - revision_if_needed
+    - final_approval
+  quality_gate:
+    pass_score: 85
+    revision_score_min: 70

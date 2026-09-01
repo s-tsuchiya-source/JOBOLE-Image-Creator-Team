@@ -1,0 +1,4 @@
+storage:
+  projects_root_env: PROJECTS_ROOT
+  local_temp_root_env: LOCAL_TEMP_ROOT
+  description: Google Drive上の案件保存先は環境変数から取得する

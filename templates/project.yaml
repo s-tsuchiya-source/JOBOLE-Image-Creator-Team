@@ -1,0 +1,22 @@
+project_id: PJ-0001
+project_name: サンプル案件
+client_name: Sample Client
+objective: 資料請求
+deadline: 2026-09-30
+quantity: 3
+
+formats:
+  - 1200x628
+  - 1200x1200
+  - 960x1200
+
+requirements:
+  target: 代理店
+  message: 1メッセージを明確に伝える
+  notes: ブランドルール順守
+
+storage:
+  projects_root: ${PROJECTS_ROOT}
+  drive_path: JOBOLE-Image-Creator-Team/projects/PJ-0001
+
+status: planning

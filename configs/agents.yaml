@@ -1,0 +1,11 @@
+agents:
+  production_director:
+    file: .claude/agents/production-director.md
+  text_director:
+    file: .claude/agents/text-director.md
+  image_director:
+    file: .claude/agents/image-director.md
+  designer:
+    file: .claude/agents/designer.md
+  reviewer:
+    file: .claude/agents/reviewer.md
