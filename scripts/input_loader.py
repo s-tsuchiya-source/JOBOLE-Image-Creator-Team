@@ -113,27 +113,41 @@ def normalize_project_inputs(project_dir: Path) -> dict:
     request_dir = project_dir / "00_request"
     job_dir = request_dir / "inbox" / "job_posting"
     hearing_dir = request_dir / "inbox" / "hearing"
-    reference_dir = request_dir / "inbox" / "references"
+    request_text_dir = request_dir / "inbox" / "request_text"
+    reference_dir = request_dir / "inbox" / "references"  # legacy/internal only
     normalized_dir = request_dir / "normalized"
 
-    for folder in (job_dir, hearing_dir, reference_dir, normalized_dir):
+    for folder in (
+        job_dir,
+        hearing_dir,
+        request_text_dir,
+        reference_dir,
+        normalized_dir,
+    ):
         folder.mkdir(parents=True, exist_ok=True)
 
     categories = {
         "job_posting": list_files(job_dir),
         "hearing": list_files(hearing_dir),
+        "request_text": list_files(request_text_dir),
         "references": list_files(reference_dir),
     }
 
     index = {
         "job_posting": [],
         "hearing": [],
+        "request_text": [],
         "references": [],
         "errors": [],
     }
-    bundle_parts = ["# Source Bundle", ""]
+    bundle_parts = [
+        "# Source Bundle",
+        "",
+        "Priority: job_posting=facts, hearing/request_text=requests/preferences.",
+        "",
+    ]
 
-    for category in ("job_posting", "hearing"):
+    for category in ("job_posting", "hearing", "request_text"):
         for path in categories[category]:
             relative = path.relative_to(project_dir).as_posix()
             item = {
@@ -168,6 +182,8 @@ def normalize_project_inputs(project_dir: Path) -> dict:
                 index[category].append(item)
                 index["errors"].append(f"{relative}: {exc}")
 
+    # Kept only for backwards compatibility with older projects. New user intake
+    # does not require or ask for reference files.
     for path in categories["references"]:
         relative = path.relative_to(project_dir).as_posix()
         index["references"].append(
@@ -190,11 +206,15 @@ def normalize_project_inputs(project_dir: Path) -> dict:
 
     loaded_jobs = sum(item.get("status") == "loaded" for item in index["job_posting"])
     loaded_hearing = sum(item.get("status") == "loaded" for item in index["hearing"])
+    loaded_request_text = sum(
+        item.get("status") == "loaded" for item in index["request_text"]
+    )
 
-    # A job posting is the only mandatory source. Hearing information is optional;
-    # specialist agents must request clarification only when missing information
-    # materially blocks production.
-    ready = loaded_jobs > 0 and not index["errors"]
+    # The job posting is the only mandatory source. Hearing and supplementary
+    # text are optional and their absence never blocks normal creative generation.
+    ready = loaded_jobs > 0 and not any(
+        error.startswith("00_request/inbox/job_posting/") for error in index["errors"]
+    )
 
     return {
         "source_bundle": str(bundle_path),
@@ -202,7 +222,10 @@ def normalize_project_inputs(project_dir: Path) -> dict:
         "job_posting_count": loaded_jobs,
         "hearing_count": loaded_hearing,
         "hearing_provided": loaded_hearing > 0,
-        "reference_count": len(index["references"]),
+        "request_text_count": loaded_request_text,
+        "request_text_provided": loaded_request_text > 0,
+        "job_only_mode": loaded_hearing == 0 and loaded_request_text == 0,
+        "legacy_reference_count": len(index["references"]),
         "errors": index["errors"],
         "ready": ready,
     }
