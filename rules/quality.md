@@ -63,11 +63,26 @@ Original Job Posting / Hearing
 - 同一Creativeの自動修正は原則3回まで。
 - 3回で解決しない場合は `needs_human_review` とする。
 
-## コストガード
+## 認証・コスト原則
+### テキストAI
+- Claude専門AgentはClaude Codeのサブスクリプションログインを使用する。
+- Codex CCOはCodex IDE/CLIのChatGPTログインを使用する。
+- テキストAI用 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` は要求しない。
+- テキスト工程の増分APIコストは0円として記録する。
+- ただしClaude/ChatGPT契約プランの利用枠は消費する。
+
+### ローカル画像AI
+`IMAGE_BACKEND=local_webui` の場合:
+- 画像生成APIの増分費用は0円として記録する。
+- ローカルPCのGPU・電力・計算時間は別途発生する。
+- コストが0円でも自動修正上限3回は維持する。
+
+### OpenAI画像API
+`IMAGE_BACKEND=openai` の場合のみ以下の有料画像コストガードを適用する。
 - 最終画像1枚あたりのハード上限: 400円
 - 330円到達時点で、未承認Creativeの次の有料自動修正を開始しない。
 - 400円到達時は自動継続せず `needs_human_review` とする。
-- live実行時は、為替・Claude・Codex・画像生成の料金設定が揃っていない場合は制作を開始しない。
+- 画像API料金・予算管理為替が未設定なら有料画像生成を開始しない。
 
 ## NG例
 - 根拠不明のNo.1表現
@@ -76,3 +91,4 @@ Original Job Posting / Hearing
 - 読めないほど小さい文字
 - AIが勝手に補った給与・待遇
 - Reviewerの点数だけを根拠にCodex Gateを省略すること
+- Claude/Codexテキスト工程を意図せずAPIキー課金へ切り替えること
