@@ -18,7 +18,10 @@ TMP_ROOT = REPO_ROOT / "tmp" / "current-project"
 
 
 def load_environment() -> Path:
-    load_dotenv(ENV_PATH)
+    # The repository .env is the source of truth for this local production tool.
+    # override=True prevents an old Windows/PowerShell environment variable from
+    # silently sending project output to another root.
+    load_dotenv(ENV_PATH, override=True)
     projects_root_value = os.getenv("PROJECTS_ROOT")
     if not projects_root_value:
         raise SystemExit(
@@ -172,8 +175,6 @@ def write_context_files(context: dict) -> None:
             f"format={row.get('format', '')}"
         )
 
-    # UTF-8 with BOM keeps Japanese readable in Windows PowerShell 5.x Get-Content
-    # while remaining safe for VS Code / Claude / Codex to read as Markdown.
     (TMP_ROOT / "context.md").write_text(
         "\n".join(lines) + "\n",
         encoding="utf-8-sig",
