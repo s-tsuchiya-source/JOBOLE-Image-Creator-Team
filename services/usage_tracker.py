@@ -9,16 +9,6 @@ from pathlib import Path
 from services.providers import ProviderResult
 
 
-REQUIRED_LIVE_COST_ENV = (
-    "USDJPY_RATE",
-    "ANTHROPIC_INPUT_USD_PER_M",
-    "ANTHROPIC_OUTPUT_USD_PER_M",
-    "OPENAI_CCO_INPUT_USD_PER_M",
-    "OPENAI_CCO_OUTPUT_USD_PER_M",
-    "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
-)
-
-
 @dataclass
 class UsageEntry:
     timestamp: str
@@ -29,6 +19,7 @@ class UsageEntry:
     output_tokens: int
     image_generations: int
     estimated_cost_yen: float | None
+    billing_mode: str = ""
 
 
 def _float_env(name: str) -> float | None:
@@ -39,62 +30,57 @@ def _float_env(name: str) -> float | None:
 
 
 def validate_live_cost_configuration() -> None:
-    """Refuse paid production when budget tracking cannot be calculated."""
+    """Validate only the image backend that can create incremental API spend.
+
+    Codex CCO and Claude specialists run through subscription-authenticated local
+    CLIs and therefore do not require token pricing or text API keys.
+    """
     if os.getenv("PRODUCTION_MODE", "dry-run").lower() != "live":
         return
+    backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
+    if backend in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+        return
+    if backend not in {"openai", "openai_api"}:
+        raise SystemExit(f"Unsupported IMAGE_BACKEND={backend!r}")
 
-    missing: list[str] = []
-    invalid: list[str] = []
-    for name in REQUIRED_LIVE_COST_ENV:
-        raw = os.getenv(name)
-        if raw is None or not raw.strip():
-            missing.append(name)
+    required = (
+        "OPENAI_API_KEY",
+        "OPENAI_IMAGE_MODEL",
+        "USDJPY_RATE",
+        "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
+    )
+    missing = [name for name in required if not (os.getenv(name) or "").strip()]
+    invalid = []
+    for name in ("USDJPY_RATE", "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION"):
+        raw = (os.getenv(name) or "").strip()
+        if not raw:
             continue
         try:
-            value = float(raw)
+            if float(raw) <= 0:
+                invalid.append(name)
         except ValueError:
-            invalid.append(f"{name}={raw!r}")
-            continue
-        if value <= 0:
-            invalid.append(f"{name}={raw!r}")
-
+            invalid.append(name)
     if missing or invalid:
-        details = []
+        lines = []
         if missing:
-            details.append("未設定: " + ", ".join(missing))
+            lines.append("未設定: " + ", ".join(missing))
         if invalid:
-            details.append("0より大きい数値が必要: " + ", ".join(invalid))
+            lines.append("0より大きい数値が必要: " + ", ".join(invalid))
         raise SystemExit(
-            "live productionを開始できません。400円/枚の予算ガードに必要な料金設定が不完全です。\n"
-            + "\n".join(details)
-            + "\n.env を設定してから再実行してください。API呼び出しはまだ行われていません。"
+            "OpenAI画像APIモードを開始できません。\n"
+            + "\n".join(lines)
+            + "\nテキストAI用APIキーは不要です。"
         )
 
 
 def estimate_text_cost_yen(result: ProviderResult) -> float | None:
-    usd_jpy = _float_env("USDJPY_RATE")
-    if usd_jpy is None:
-        return None
-
-    if result.provider == "anthropic":
-        input_rate = _float_env("ANTHROPIC_INPUT_USD_PER_M")
-        output_rate = _float_env("ANTHROPIC_OUTPUT_USD_PER_M")
-    elif result.provider == "openai":
-        input_rate = _float_env("OPENAI_CCO_INPUT_USD_PER_M")
-        output_rate = _float_env("OPENAI_CCO_OUTPUT_USD_PER_M")
-    else:
-        return None
-
-    if input_rate is None or output_rate is None:
-        return None
-    usd = (result.input_tokens / 1_000_000) * input_rate
-    usd += (result.output_tokens / 1_000_000) * output_rate
-    return round(usd * usd_jpy, 4)
+    if result.provider in {"claude_code", "codex_cli"}:
+        return 0.0
+    return float(result.incremental_cost_yen)
 
 
 class UsageTracker:
     def __init__(self, project_dir: Path):
-        # This runs before the first paid provider call in run_production.py.
         validate_live_cost_configuration()
         self.path = project_dir / "04_project_review" / "provider-usage.jsonl"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,16 +95,33 @@ class UsageTracker:
             output_tokens=result.output_tokens,
             image_generations=0,
             estimated_cost_yen=estimate_text_cost_yen(result),
+            billing_mode=str(result.metadata.get("billing_mode") or "subscription_login"),
         )
         self._append(entry)
         return entry
 
-    def record_image(self, stage: str, provider: str, model: str, count: int = 1) -> UsageEntry:
-        usd_jpy = _float_env("USDJPY_RATE")
-        unit_usd = _float_env("OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION")
-        cost = None
-        if usd_jpy is not None and unit_usd is not None:
-            cost = round(unit_usd * count * usd_jpy, 4)
+    def record_image(
+        self,
+        stage: str,
+        provider: str,
+        model: str,
+        count: int = 1,
+    ) -> UsageEntry:
+        normalized = provider.strip().lower()
+        if normalized in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+            cost = 0.0
+            billing_mode = "local_compute"
+        elif normalized in {"openai", "openai_api", "openai_image_api"}:
+            usd_jpy = _float_env("USDJPY_RATE")
+            unit_usd = _float_env("OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION")
+            cost = None
+            if usd_jpy is not None and unit_usd is not None:
+                cost = round(unit_usd * count * usd_jpy, 4)
+            billing_mode = "api_usage"
+        else:
+            cost = None
+            billing_mode = "unknown"
+
         entry = UsageEntry(
             timestamp=datetime.now().isoformat(timespec="seconds"),
             stage=stage,
@@ -128,6 +131,7 @@ class UsageTracker:
             output_tokens=0,
             image_generations=count,
             estimated_cost_yen=cost,
+            billing_mode=billing_mode,
         )
         self._append(entry)
         return entry
