@@ -13,8 +13,9 @@ quality:
     art_candidate_min: 2
   budget:
     target_max_yen_per_final_image: 400
-    warning_yen_per_final_image: 350
-    stop_and_escalate_yen_per_final_image: 450
+    warning_yen_per_final_image: 330
+    stop_and_escalate_yen_per_final_image: 400
+    do_not_start_another_revision_at_or_above_yen: 330
   human_review:
     always_required_before_external_delivery: true
     escalate_on_revision_limit: true
