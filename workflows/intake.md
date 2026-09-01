@@ -1,7 +1,31 @@
 # Intake Workflow
 
 ## 目的
-求人原稿とヒアリング資料をGoogle Driveへ置くだけで、AI制作チームが読める入力状態へ正規化する。
+人間がVSCodeのCodexへ求人原稿・ヒアリング・参考画像・補足テキストを送るだけで、Google Drive案件を作成して制作を開始できる状態にする。
+
+## 標準入口
+
+```text
+Human
+↓
+VSCode Codex
+↓
+scripts/create_project_from_intake.py
+↓
+Google Drive project
+↓
+run_production.py
+```
+
+人間にGoogle Driveフォルダ作成やPythonコマンド操作を要求しない。
+
+## 最低入力
+- 求人原稿: 必須1件以上
+- ヒアリング: 任意
+- 参考画像: 任意
+- 補足テキスト: 任意
+
+求人原稿だけで制作判断できる場合は進行する。ヒアリングがないことだけを理由に停止しない。
 
 ## Google Drive入力先
 
@@ -13,11 +37,30 @@
    └─ references/
 ```
 
-- `job_posting/`: 元求人原稿
-- `hearing/`: 制作要望・ヒアリング結果
-- `references/`: 参考画像、ロゴ、ブランド資料等
+補足テキストは `hearing/request-text.md` として保存する。
 
-## 対応するテキスト抽出形式
+## Codexの非対話受付
+
+```powershell
+python scripts/create_project_from_intake.py `
+  --project-name "案件名" `
+  --quantity 1 `
+  --job-posting "C:\path\求人原稿.xlsx" `
+  --hearing "C:\path\ヒアリング.docx" `
+  --reference "C:\path\参考.png" `
+  --request-text-file "tmp\intake\request.txt"
+```
+
+戻り値例:
+
+```text
+PROJECT_ID=PJ-0003
+PROJECT_DIR=G:\...\PJ-0003_xxx
+```
+
+CodexはこのPROJECT_IDを使って以降を実行する。
+
+## 対応テキスト抽出形式
 - txt
 - md
 - csv
@@ -27,15 +70,15 @@
 - xlsx
 - PDF（テキスト埋め込み型）
 
-画像PDF・スキャンPDFは現時点では自動テキスト抽出対象外。参考素材としては保存可能。
+画像PDF・スキャンPDFは現時点ではテキスト抽出対象外。参考素材として保存可能。
 
-## 実行
+## 正規化
 
-```bash
-python scripts/start_production.py PJ-0001
+```powershell
+python scripts/run_production.py PJ-XXXX --dry-run
 ```
 
-## 実行後
+内部で `input_loader.py` が以下を作る。
 
 ```text
 00_request/
@@ -44,23 +87,23 @@ python scripts/start_production.py PJ-0001
    └─ source-index.json
 ```
 
-が作成される。
-
-`source-bundle.md` はProduction Directorが最初に読む統合入力データ。
-
 ## 入力ゲート
-以下を満たす場合のみ `input_ready` とする。
-
+`input_ready` の最低条件:
 - 求人原稿が1件以上読み込める
-- ヒアリング資料が1件以上読み込める
 - 読み込みエラーがない
 
-不足時は `needs_input` とし、制作へ進まない。
+ヒアリング・参考素材・補足テキストは任意。
+
+制作に不可欠な情報が実際に不足しているかは、Recruitment Analyst / Production Director / Codex Gateが判断する。
 
 ## 次工程
-Production Directorは `tmp/current-project/production-director-task.md` を参照し、
 
-- `01_strategy/production-brief.md`
-- `01_strategy/creative-plan.yaml`
-
-を作成する。
+```text
+source-bundle
+↓
+Claude Recruitment Analyst
+↓
+Codex Fact Gate
+↓
+Production Director
+```
