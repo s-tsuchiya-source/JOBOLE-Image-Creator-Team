@@ -1,0 +1,7 @@
+knowledge:
+  root_env: KNOWLEDGE_ROOT
+  golden_creatives: golden_creatives
+  rejected_creatives: rejected_creatives
+  brand_rules: brand_rules
+  media_rules: media_rules
+  description: Real benchmark images and internal reference material stay outside GitHub.
