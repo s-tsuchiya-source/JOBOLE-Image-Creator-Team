@@ -40,8 +40,26 @@
 - 画像破綻
 - 入稿観点確認
 
+## 案件作業開始ルール
+1. 対象 `project_id` を必ず確定する。
+2. `python scripts/load_project.py <project_id>` を実行する。
+3. `tmp/current-project/context.md` と `context.json` を確認する。
+4. manifestのstatusから次に処理するCreativeを決める。
+5. Google Drive上の対象案件以外を暗黙参照しない。
+6. 案件切替時はContextを再生成する。
+
+## Codexの主な役割
+- 案件Contextの読み込み
+- manifestの状態確認
+- 次タスクの特定
+- ファイル・フォルダ・スクリプトの管理
+- ワークフロー改善
+- テスト・検証
+- 制作工程の自動化
+
 ## 基本ルール
 - 1つのAgentが全てを抱え込まない
 - Agent間の受け渡しはファイルで明示する
 - 出力フォーマットはテンプレート準拠
 - 案件データはGoogle Driveに保存する
+- GitHubには案件データを保存しない
