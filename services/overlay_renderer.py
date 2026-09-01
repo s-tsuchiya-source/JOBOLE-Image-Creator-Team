@@ -14,27 +14,52 @@ BOLD_FONT_CANDIDATES = [
 ]
 REGULAR_FONT_CANDIDATES = [
     "C:/Windows/Fonts/YuGothR.ttc",
+    "C:/Windows/Fonts/YuGothM.ttc",
     "C:/Windows/Fonts/meiryo.ttc",
     "C:/Windows/Fonts/msgothic.ttc",
 ]
 
 
-def _resolve_font(config_key: str, fallback_key: str, candidates: list[str]) -> Path:
-    configured = os.getenv(config_key) or os.getenv(fallback_key)
-    if configured and Path(configured).exists():
-        return Path(configured)
+def _existing_path(value: str | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.exists() else None
+
+
+def _first_existing(candidates: list[str]) -> Path | None:
     for candidate in candidates:
         path = Path(candidate)
         if path.exists():
             return path
-    raise FileNotFoundError(
-        f"Japanese font was not found. Set {config_key} or {fallback_key} in .env."
-    )
+    return None
 
 
 def resolve_font_paths() -> tuple[Path, Path]:
-    bold = _resolve_font("JAPANESE_BOLD_FONT_PATH", "JAPANESE_FONT_PATH", BOLD_FONT_CANDIDATES)
-    regular = _resolve_font("JAPANESE_REGULAR_FONT_PATH", "JAPANESE_FONT_PATH", REGULAR_FONT_CANDIDATES)
+    # Bold may intentionally reuse the legacy JAPANESE_FONT_PATH setting.
+    bold = (
+        _existing_path(os.getenv("JAPANESE_BOLD_FONT_PATH"))
+        or _existing_path(os.getenv("JAPANESE_FONT_PATH"))
+        or _first_existing(BOLD_FONT_CANDIDATES)
+    )
+
+    # Regular deliberately prefers a genuine regular Windows font before falling
+    # back to JAPANESE_FONT_PATH, so an existing YuGothB setting does not make
+    # every line of the ad look equally bold/mechanical.
+    regular = (
+        _existing_path(os.getenv("JAPANESE_REGULAR_FONT_PATH"))
+        or _first_existing(REGULAR_FONT_CANDIDATES)
+        or _existing_path(os.getenv("JAPANESE_FONT_PATH"))
+    )
+
+    if not bold:
+        raise FileNotFoundError(
+            "Japanese bold font was not found. Set JAPANESE_BOLD_FONT_PATH or JAPANESE_FONT_PATH in .env."
+        )
+    if not regular:
+        raise FileNotFoundError(
+            "Japanese regular font was not found. Set JAPANESE_REGULAR_FONT_PATH or JAPANESE_FONT_PATH in .env."
+        )
     return bold, regular
 
 
@@ -173,7 +198,6 @@ def render_overlay(
     facts = [item for item in items if item.get("role") == "fact"]
     cta = next((item for item in items if item.get("role") == "cta"), None)
 
-    # Headline zone ---------------------------------------------------------
     cursor_y = margin_y
     if headline:
         text = str(headline.get("text") or "").strip()
@@ -207,7 +231,6 @@ def render_overlay(
         )
         cursor_y += text_h + max(16, round(font.size * 0.24))
 
-    # Subcopy zone ----------------------------------------------------------
     if subcopy:
         text = str(subcopy.get("text") or "").strip()
         font, display_text = _fit_font_and_text(
@@ -229,7 +252,6 @@ def render_overlay(
             spacing=spacing,
         )
 
-    # Bottom benefit / action zone -----------------------------------------
     bottom_y = height - margin_y
 
     if cta:
@@ -243,7 +265,6 @@ def render_overlay(
         box_w = tw + pad_x * 2
         box_h = th + pad_y * 2
         y = bottom_y - box_h
-        # Subtle shadow gives the CTA a button-like, less mechanical finish.
         draw.rounded_rectangle(
             (margin_x + 2, y + 4, margin_x + box_w + 2, y + box_h + 4),
             radius=max(10, box_h // 3),
@@ -262,7 +283,6 @@ def render_overlay(
         )
         bottom_y = y - max(12, round(height * 0.018))
 
-    # Facts become benefit chips, visually different from headline and CTA.
     for item in reversed(facts):
         text = str(item.get("text") or "").strip()
         font, display_text = _fit_font_and_text(
