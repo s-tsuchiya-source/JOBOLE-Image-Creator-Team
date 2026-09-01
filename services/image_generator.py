@@ -239,15 +239,15 @@ class OpenVINOOVMSImageGenerator:
         output_path: Path,
         negative_prompt: str = "",
     ) -> Path:
-        full_prompt = prompt
-        if negative_prompt.strip():
-            full_prompt += "\n\nAvoid: " + negative_prompt.strip()
         payload = {
             "model": self.model,
-            "prompt": full_prompt,
+            "prompt": prompt,
             "num_inference_steps": self.steps,
             "size": self.generation_size,
+            "response_format": "b64_json",
         }
+        if negative_prompt.strip():
+            payload["negative_prompt"] = negative_prompt.strip()
         result = _http_json(
             self.base_url + "/v3/images/generations",
             payload=payload,
@@ -266,7 +266,7 @@ def create_image_generator():
     backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
     if backend in {"local", "local_webui", "webui", "forge", "automatic1111"}:
         return LocalWebUIImageGenerator()
-    if backend in {"openvino", "openvino_ovms", "ovms", "intel_openvino"}:
+    if backend in {"openvino", "openvino_ovms", "ovms", "intel", "intel_openvino"}:
         return OpenVINOOVMSImageGenerator()
     if backend in {"openai", "openai_api"}:
         return OpenAIImageGenerator()
