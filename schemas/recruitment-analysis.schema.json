@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecruitmentAnalysis",
+  "type": "object",
+  "required": ["status", "facts", "allowed_claims", "unknown_fields", "evidence"],
+  "properties": {
+    "status": {"enum": ["ready", "needs_clarification", "blocked"]},
+    "facts": {
+      "type": "object",
+      "properties": {
+        "company_name": {"type": ["string", "null"]},
+        "job_title": {"type": ["string", "null"]},
+        "employment_type": {"type": ["string", "null"]},
+        "salary": {"type": ["string", "null"]},
+        "location": {"type": ["string", "null"]},
+        "working_hours": {"type": ["string", "null"]},
+        "holidays": {"type": ["string", "null"]},
+        "job_description": {"type": ["string", "null"]},
+        "requirements": {"type": "array", "items": {"type": "string"}},
+        "benefits": {"type": "array", "items": {"type": "string"}},
+        "training": {"type": ["string", "null"]},
+        "application_flow": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "explicit_target": {"type": "array", "items": {"type": "string"}},
+    "allowed_claims": {"type": "array", "items": {"type": "string"}},
+    "prohibited_or_unverified_claims": {"type": "array", "items": {"type": "string"}},
+    "unknown_fields": {"type": "array", "items": {"type": "string"}},
+    "assumption_candidates": {"type": "array", "items": {"type": "string"}},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact_key", "source", "quote_or_summary"],
+        "properties": {
+          "fact_key": {"type": "string"},
+          "source": {"type": "string"},
+          "quote_or_summary": {"type": "string"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
