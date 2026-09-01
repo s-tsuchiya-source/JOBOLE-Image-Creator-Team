@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -19,21 +20,22 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from input_loader import normalize_project_inputs
 from load_project import load_environment, load_yaml, resolve_project_dir
-from services.agent_runner import load_agent_config, run_claude_agent
-from services.manifest import apply_creative_plan, ensure_current_schema
-from services.quality_gate import run_codex_gate
+from services.agent_runner import load_agent_config
+from services.creative_pipeline import produce_creatives
+from services.manifest import apply_creative_plan, ensure_current_schema, load_rows
+from services.pipeline_stages import (
+    PipelineStop,
+    run_direction_stage,
+    run_recruitment_stage,
+    run_strategy_stage,
+    save_json,
+)
 from services.schema_validator import load_schema
+from services.usage_tracker import UsageTracker
 
 
 load_dotenv(REPO_ROOT / ".env")
-
-
-def save_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8-sig",
-    )
+QUALITY_CONFIG = REPO_ROOT / "configs" / "quality.yaml"
 
 
 def save_project_yaml(path: Path, project: dict) -> None:
@@ -43,7 +45,12 @@ def save_project_yaml(path: Path, project: dict) -> None:
 
 def set_project_status(project_dir: Path, project: dict, status: str) -> None:
     project["status"] = status
+    project["updated_at"] = datetime.now().isoformat(timespec="seconds")
     save_project_yaml(project_dir / "project.yaml", project)
+
+
+def load_quality() -> dict:
+    return (yaml.safe_load(QUALITY_CONFIG.read_text(encoding="utf-8")) or {}).get("quality", {})
 
 
 def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
@@ -54,6 +61,7 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
 
     add("project_yaml", bool(project), str(project_dir / "project.yaml"))
     add("job_posting", intake["job_posting_count"] > 0, f"count={intake['job_posting_count']}")
+    add("hearing_optional", True, f"provided={intake.get('hearing_provided', False)}")
     add("input_errors", not intake["errors"], "; ".join(intake["errors"]) or "none")
 
     for agent_name in (
@@ -78,12 +86,21 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
     except Exception as exc:
         add("quality_gate_schema", False, str(exc))
 
+    add("codex_cco_role", (REPO_ROOT / ".codex" / "chief-creative-officer.md").exists(), ".codex/chief-creative-officer.md")
+    add("quality_config", QUALITY_CONFIG.exists(), str(QUALITY_CONFIG))
+
     mode = os.getenv("PRODUCTION_MODE", "dry-run").lower()
     if mode == "live":
-        add("anthropic_api_key", bool(os.getenv("ANTHROPIC_API_KEY")), "configured" if os.getenv("ANTHROPIC_API_KEY") else "missing")
-        add("anthropic_model", bool(os.getenv("ANTHROPIC_MODEL")), os.getenv("ANTHROPIC_MODEL") or "missing")
-        add("openai_api_key", bool(os.getenv("OPENAI_API_KEY")), "configured" if os.getenv("OPENAI_API_KEY") else "missing")
-        add("openai_cco_model", bool(os.getenv("OPENAI_CCO_MODEL")), os.getenv("OPENAI_CCO_MODEL") or "missing")
+        live_settings = {
+            "ANTHROPIC_API_KEY": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "ANTHROPIC_MODEL": bool(os.getenv("ANTHROPIC_MODEL")),
+            "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
+            "OPENAI_CCO_MODEL": bool(os.getenv("OPENAI_CCO_MODEL")),
+            "OPENAI_IMAGE_MODEL": bool(os.getenv("OPENAI_IMAGE_MODEL")),
+        }
+        for name, configured in live_settings.items():
+            detail = "configured" if ("KEY" in name and configured) else (os.getenv(name) or "missing")
+            add(name.lower(), configured, detail)
 
     return {
         "mode": mode,
@@ -92,165 +109,148 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
     }
 
 
-def require_gate_pass(gate_result: dict, project_dir: Path, project: dict) -> None:
-    decision = gate_result.get("decision")
-    if decision == "pass":
-        return
-    status_map = {
-        "needs_clarification": "needs_clarification",
-        "needs_human_review": "needs_human_review",
-        "blocked": "blocked",
-        "revise": "revision",
-    }
-    set_project_status(project_dir, project, status_map.get(decision, "revision"))
-    raise SystemExit(f"Quality Gate stopped production: {decision}")
-
-
-def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
+def build_original_request(project: dict, intake: dict) -> dict:
     source_bundle = Path(intake["source_bundle"]).read_text(encoding="utf-8-sig")
-    original_request = {
+    source_index = Path(intake["source_index"]).read_text(encoding="utf-8-sig")
+    return {
         "project": project,
         "source_bundle": source_bundle,
+        "source_index": json.loads(source_index),
         "reference_count": intake["reference_count"],
         "hearing_provided": intake["hearing_provided"],
     }
 
-    set_project_status(project_dir, project, "analyzing")
 
-    recruitment = run_claude_agent(
-        "recruitment_analyst",
-        context=original_request,
-        task="Extract recruitment facts with evidence. Do not create copy or visual ideas.",
-    )
-    recruitment_path = project_dir / "01_strategy" / "recruitment" / "recruitment-analysis.json"
-    save_json(recruitment_path, recruitment.data)
-
-    fact_gate = run_codex_gate(
-        "fact_gate",
-        original_request=original_request,
-        upstream_outputs={"recruitment_analysis": recruitment.data},
-    )
-    save_json(project_dir / "01_strategy" / "quality_gates" / "fact-gate.json", fact_gate.data)
-    require_gate_pass(fact_gate.data, project_dir, project)
-
-    set_project_status(project_dir, project, "planning")
-    strategy_context = {
-        "original_request": original_request,
-        "recruitment_analysis": recruitment.data,
-        "fact_gate": fact_gate.data,
-        "requested_quantity": project.get("quantity"),
+def write_production_summary(project_dir: Path, project: dict, tracker: UsageTracker) -> None:
+    rows = load_rows(project_dir / "creative-manifest.csv")
+    statuses: dict[str, int] = {}
+    for row in rows:
+        status = row.get("status") or "unknown"
+        statuses[status] = statuses.get(status, 0) + 1
+    summary = {
+        "project_id": project.get("project_id"),
+        "status": project.get("status"),
+        "human_approval_status": project.get("human_approval_status"),
+        "creative_count": len(rows),
+        "creative_statuses": statuses,
+        "estimated_total_cost_yen": tracker.total_estimated_cost_yen(),
+        "delivery_dir": str(project_dir / "05_delivery"),
+        "completed_at": datetime.now().isoformat(timespec="seconds"),
     }
-    production = run_claude_agent(
-        "production_director",
-        context=strategy_context,
-        task=(
-            "Create a competition-based production plan. Candidate axes must be compared; "
-            "creative group quantities must sum exactly to requested_quantity."
-        ),
-    )
-    production_path = project_dir / "01_strategy" / "production-plan.json"
-    save_json(production_path, production.data)
+    save_json(project_dir / "04_project_review" / "production-summary.json", summary)
 
-    strategy_gate = run_codex_gate(
-        "strategy_gate",
-        original_request=original_request,
-        upstream_outputs={
-            "recruitment_analysis": recruitment.data,
-            "fact_gate": fact_gate.data,
-            "production_plan": production.data,
-        },
-    )
-    save_json(project_dir / "01_strategy" / "quality_gates" / "strategy-gate.json", strategy_gate.data)
-    require_gate_pass(strategy_gate.data, project_dir, project)
 
-    if production.data.get("status") != "ready_for_direction":
-        target_status = production.data.get("status") or "needs_clarification"
-        set_project_status(project_dir, project, target_status)
-        raise SystemExit(f"Production plan is not ready: {target_status}")
+def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
+    quality = load_quality()
+    max_revisions = int(quality.get("max_revision_count", 3))
+    tracker = UsageTracker(project_dir)
+    original_request = build_original_request(project, intake)
 
-    manifest_path = project_dir / "creative-manifest.csv"
-    apply_creative_plan(manifest_path, project["project_id"], production.data)
-    set_project_status(project_dir, project, "directing")
-
-    direction_summary = {}
-    for group in production.data.get("creative_groups", []):
-        group_id = group["creative_group_id"]
-        group_context = {
-            "original_request": original_request,
-            "recruitment_analysis": recruitment.data,
-            "production_plan": production.data,
-            "creative_group": group,
-        }
-
-        copy_result = run_claude_agent(
-            "copy_director",
-            context=group_context,
-            task="Generate multiple copy candidates, select one, and trace every claim to facts.",
-        )
-        copy_path = project_dir / "02_direction" / "copy" / f"{group_id}.json"
-        save_json(copy_path, copy_result.data)
-
-        art_context = dict(group_context)
-        art_context["copy_direction"] = copy_result.data
-        art_result = run_claude_agent(
-            "art_director",
-            context=art_context,
-            task="Create art direction for the selected copy with explicit safe area and size variations.",
-        )
-        art_path = project_dir / "02_direction" / "art" / f"{group_id}.json"
-        save_json(art_path, art_result.data)
-
-        direction_gate = run_codex_gate(
-            "direction_gate",
+    try:
+        set_project_status(project_dir, project, "analyzing")
+        recruitment, fact_gate = run_recruitment_stage(
+            project_dir=project_dir,
             original_request=original_request,
-            upstream_outputs={
-                "recruitment_analysis": recruitment.data,
-                "production_plan": production.data,
-                "creative_group": group,
-                "copy_direction": copy_result.data,
-                "art_direction": art_result.data,
-            },
+            tracker=tracker,
+            max_revisions=max_revisions,
         )
-        gate_path = project_dir / "01_strategy" / "quality_gates" / f"direction-gate-{group_id}.json"
-        save_json(gate_path, direction_gate.data)
-        require_gate_pass(direction_gate.data, project_dir, project)
 
-        prompt_context = dict(art_context)
-        prompt_context["art_direction"] = art_result.data
-        prompt_context["direction_gate"] = direction_gate.data
-        prompt_result = run_claude_agent(
-            "prompt_designer",
-            context=prompt_context,
-            task=(
-                "Translate approved directions into an image-generation prompt package. "
-                "Keep exact job facts and important text in overlay_text."
-            ),
+        set_project_status(project_dir, project, "planning")
+        production_plan, strategy_gate = run_strategy_stage(
+            project_dir=project_dir,
+            original_request=original_request,
+            recruitment=recruitment,
+            fact_gate=fact_gate,
+            requested_quantity=int(project.get("quantity") or 1),
+            tracker=tracker,
+            max_revisions=max_revisions,
         )
-        prompt_path = project_dir / "02_direction" / "prompts" / f"{group_id}.json"
-        save_json(prompt_path, prompt_result.data)
-        direction_summary[group_id] = {
-            "copy_path": str(copy_path),
-            "art_path": str(art_path),
-            "prompt_path": str(prompt_path),
+        if production_plan.get("status") != "ready_for_direction":
+            decision = production_plan.get("status") or "needs_clarification"
+            raise PipelineStop(decision, f"Production plan status: {decision}")
+
+        apply_creative_plan(
+            project_dir / "creative-manifest.csv",
+            project["project_id"],
+            production_plan,
+        )
+
+        set_project_status(project_dir, project, "directing")
+        directions: dict[str, dict] = {}
+        for group in production_plan.get("creative_groups", []):
+            group_id = group["creative_group_id"]
+            directions[group_id] = run_direction_stage(
+                project_dir=project_dir,
+                original_request=original_request,
+                recruitment=recruitment,
+                production_plan=production_plan,
+                creative_group=group,
+                tracker=tracker,
+                max_revisions=max_revisions,
+            )
+
+        direction_index = {
+            group_id: {
+                "copy": f"02_direction/copy/{group_id}.json",
+                "art": f"02_direction/art/{group_id}.json",
+                "prompt": f"02_direction/prompts/{group_id}.json",
+                "gate": f"01_strategy/quality_gates/direction-gate-{group_id}.json",
+            }
+            for group_id in directions
         }
+        save_json(project_dir / "02_direction" / "direction-summary.json", direction_index)
 
-    save_json(project_dir / "02_direction" / "direction-summary.json", direction_summary)
-    set_project_status(project_dir, project, "ready_for_image_generation")
-    print("AI strategy/direction pipeline completed.")
-    print("Status: ready_for_image_generation")
-    print("Next implementation: image generation + image review + final traceability gate.")
+        set_project_status(project_dir, project, "generating")
+        produce_creatives(
+            project_dir=project_dir,
+            project=project,
+            original_request=original_request,
+            recruitment=recruitment,
+            production_plan=production_plan,
+            directions=directions,
+            tracker=tracker,
+        )
+
+        set_project_status(project_dir, project, "completed")
+        project["human_approval_status"] = "pending"
+        project["estimated_total_cost_yen"] = tracker.total_estimated_cost_yen()
+        save_project_yaml(project_dir / "project.yaml", project)
+        write_production_summary(project_dir, project, tracker)
+
+        print("Production completed successfully.")
+        print(f"Project: {project.get('project_id')}")
+        print(f"Delivery candidates: {project_dir / '05_delivery'}")
+        print("Human final approval: pending")
+
+    except PipelineStop as exc:
+        status_map = {
+            "needs_clarification": "needs_clarification",
+            "needs_human_review": "needs_human_review",
+            "blocked": "blocked",
+            "revise": "revision",
+        }
+        set_project_status(project_dir, project, status_map.get(exc.decision, exc.decision))
+        project["stop_reason"] = exc.detail
+        save_project_yaml(project_dir / "project.yaml", project)
+        write_production_summary(project_dir, project, tracker)
+        raise SystemExit(f"Production stopped: {exc.decision} - {exc.detail}") from exc
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Run the Codex CCO + Claude specialist quality-first production pipeline."
+    )
     parser.add_argument("project_id", help="PJ-0001 or project folder prefix")
-    parser.add_argument("--dry-run", action="store_true", help="Validate system without API calls")
+    parser.add_argument("--dry-run", action="store_true", help="Validate system without AI/image API calls")
     args = parser.parse_args()
 
     projects_root = load_environment()
     project_dir = resolve_project_dir(projects_root, args.project_id)
     project = load_yaml(project_dir / "project.yaml")
-    ensure_current_schema(project_dir / "creative-manifest.csv", project.get("project_id", args.project_id))
+    ensure_current_schema(
+        project_dir / "creative-manifest.csv",
+        project.get("project_id", args.project_id),
+    )
     intake = normalize_project_inputs(project_dir)
 
     report = preflight(project_dir, project, intake)
@@ -265,7 +265,7 @@ def main() -> None:
         print(f"Report: {report_path}")
         if not report["ready"]:
             raise SystemExit(2)
-        print("dry-run completed. No AI API calls were made.")
+        print("dry-run completed. No AI or image API calls were made.")
         return
 
     if not report["ready"]:
