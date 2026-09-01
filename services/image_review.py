@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from services.agent_runner import load_agent_config, read_repo_file
-from services.providers import AnthropicProvider, ProviderResult
+from services.providers import ClaudeCodeProvider, ProviderResult
 from services.schema_validator import load_schema, validate_data
 
 
@@ -13,12 +13,12 @@ def review_image(
     *,
     image_path: Path,
     context: dict[str, Any],
-    provider: AnthropicProvider | None = None,
+    provider: ClaudeCodeProvider | None = None,
 ) -> ProviderResult:
     agent = load_agent_config("creative_reviewer")
     system_prompt = read_repo_file(agent["file"])
     schema = load_schema(agent["schema"])
-    provider = provider or AnthropicProvider()
+    provider = provider or ClaudeCodeProvider()
     user_prompt = (
         "Review the supplied generated recruitment creative independently. "
         "Compare the pixels/text in the image with every approved upstream artifact. "
