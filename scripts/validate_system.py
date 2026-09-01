@@ -68,7 +68,12 @@ def _run_version(command: str) -> tuple[bool, str]:
     return completed.returncode == 0, text or executable
 
 
-def validate_runtime_config(errors: list[str], messages: list[str]) -> None:
+def validate_text_runtime(errors: list[str], messages: list[str]) -> None:
+    """Validate only Claude Code / Codex CLI availability.
+
+    This intentionally does not validate the image backend so --verify-login can
+    be used before a local image server is installed.
+    """
     claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
     codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
 
@@ -88,33 +93,57 @@ def validate_runtime_config(errors: list[str], messages: list[str]) -> None:
     if mode not in {"dry-run", "live"}:
         errors.append("PRODUCTION_MODE must be dry-run or live")
 
-    backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
-    local_names = {"local", "local_webui", "webui", "forge", "automatic1111"}
-    if backend in local_names:
+    if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
+        messages.append(
+            "NOTE: ANTHROPIC_API_KEY exists in parent .env but will be stripped from Claude Code child processes."
+        )
+
+
+def validate_image_runtime(errors: list[str], messages: list[str]) -> None:
+    backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
+    webui_names = {"local", "local_webui", "webui", "forge", "automatic1111"}
+    openvino_names = {"openvino", "openvino_ovms", "ovms", "intel_openvino"}
+
+    if backend in webui_names:
         url = (os.getenv("LOCAL_IMAGE_API_URL") or "").strip()
         if not url:
-            errors.append("LOCAL_IMAGE_API_URL is required for local image mode")
+            errors.append("LOCAL_IMAGE_API_URL is required for local WebUI image mode")
         else:
             messages.append(f"Image backend: local_webui ({url})")
-    elif backend in {"openai", "openai_api"}:
-        required = ("OPENAI_API_KEY", "OPENAI_IMAGE_MODEL", "USDJPY_RATE", "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION")
+        return
+
+    if backend in openvino_names:
+        url = (os.getenv("OPENVINO_IMAGE_API_URL") or "").strip()
+        model = (os.getenv("OPENVINO_IMAGE_MODEL") or "").strip()
+        missing = []
+        if not url:
+            missing.append("OPENVINO_IMAGE_API_URL")
+        if not model:
+            missing.append("OPENVINO_IMAGE_MODEL")
+        if missing:
+            errors.append("OpenVINO image backend missing: " + ", ".join(missing))
+        else:
+            messages.append(f"Image backend: OpenVINO OVMS ({url}, model={model})")
+        return
+
+    if backend in {"openai", "openai_api"}:
+        required = (
+            "OPENAI_API_KEY",
+            "OPENAI_IMAGE_MODEL",
+            "USDJPY_RATE",
+            "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
+        )
         missing = [name for name in required if not (os.getenv(name) or "").strip()]
         if missing:
             errors.append("OpenAI image backend missing: " + ", ".join(missing))
         if os.getenv("OPENAI_IMAGE_QUALITY", "high").strip().lower() != "high":
             errors.append("OPENAI_IMAGE_QUALITY must be high in maximum-quality mode")
         messages.append("Image backend: OpenAI Image API")
-    else:
-        errors.append(f"Unsupported IMAGE_BACKEND={backend!r}")
+        return
 
-    if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
-        messages.append(
-            "NOTE: ANTHROPIC_API_KEY exists in parent .env but will be stripped from Claude Code child processes."
-        )
-    if (os.getenv("OPENAI_API_KEY") or "").strip() and backend in local_names:
-        messages.append(
-            "NOTE: OPENAI_API_KEY exists but local image mode does not use it; Codex child processes also strip it."
-        )
+    errors.append(
+        f"Unsupported IMAGE_BACKEND={backend!r}. Use openvino_ovms, local_webui, or openai."
+    )
 
 
 def verify_logins(errors: list[str], messages: list[str]) -> None:
@@ -269,12 +298,12 @@ def main() -> None:
     parser.add_argument(
         "--runtime-config",
         action="store_true",
-        help="Check local CLI executables and selected image backend configuration without AI generation.",
+        help="Check Claude/Codex CLI executables and selected image backend configuration without generation.",
     )
     parser.add_argument(
         "--verify-login",
         action="store_true",
-        help="Make tiny Claude/Codex subscription calls to verify login. Uses plan allowance, not text API keys.",
+        help="Verify Claude/Codex subscription login independently of image backend configuration.",
     )
     parser.add_argument(
         "--verify-image",
@@ -287,8 +316,14 @@ def main() -> None:
     messages: list[str] = []
     validate_structure(errors)
 
-    if args.runtime_config or args.verify_login or args.verify_image:
-        validate_runtime_config(errors, messages)
+    if args.runtime_config:
+        validate_text_runtime(errors, messages)
+        validate_image_runtime(errors, messages)
+    elif args.verify_login:
+        validate_text_runtime(errors, messages)
+    elif args.verify_image:
+        validate_image_runtime(errors, messages)
+
     if args.verify_login and not errors:
         verify_logins(errors, messages)
     if args.verify_image and not errors:
