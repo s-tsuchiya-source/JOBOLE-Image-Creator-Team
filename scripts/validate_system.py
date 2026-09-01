@@ -49,12 +49,30 @@ NUMERIC_LIVE_ENV = {
     "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
 }
 
+PLACEHOLDER_MARKERS = (
+    "ここに",
+    "your_api_key",
+    "your-api-key",
+    "replace_me",
+    "changeme",
+    "<api",
+    "<your",
+)
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    lowered = value.strip().lower()
+    return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
+
 
 def validate_live_config(errors: list[str]) -> None:
     for name in REQUIRED_LIVE_ENV:
         raw = os.getenv(name)
         if raw is None or not raw.strip():
             errors.append(f"Missing live setting: {name}")
+            continue
+        if _looks_like_placeholder(raw):
+            errors.append(f"Live setting still looks like a placeholder: {name}")
             continue
         if name in NUMERIC_LIVE_ENV:
             try:
@@ -78,16 +96,68 @@ def validate_live_config(errors: list[str]) -> None:
         )
 
 
+def verify_api_credentials(errors: list[str]) -> list[str]:
+    """Verify credentials/model access without running text or image generation."""
+    verified: list[str] = []
+
+    anthropic_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    anthropic_model = (os.getenv("ANTHROPIC_MODEL") or "").strip()
+    if anthropic_key and anthropic_model:
+        try:
+            from anthropic import Anthropic
+
+            client = Anthropic(api_key=anthropic_key)
+            model = client.models.retrieve(anthropic_model)
+            verified.append(f"Anthropic auth/model: OK ({getattr(model, 'id', anthropic_model)})")
+        except Exception as exc:
+            errors.append(
+                "Anthropic credential/model verification failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    cco_model = (os.getenv("OPENAI_CCO_MODEL") or "").strip()
+    image_model = (os.getenv("OPENAI_IMAGE_MODEL") or "").strip()
+    if openai_key and cco_model:
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=openai_key)
+            model = client.models.retrieve(cco_model)
+            verified.append(f"OpenAI auth/CCO model: OK ({getattr(model, 'id', cco_model)})")
+            if image_model:
+                image = client.models.retrieve(image_model)
+                verified.append(
+                    f"OpenAI image model: OK ({getattr(image, 'id', image_model)})"
+                )
+        except Exception as exc:
+            errors.append(
+                "OpenAI credential/model verification failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    return verified
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--live-config",
         action="store_true",
-        help="Validate API/model/cost settings without making any API calls.",
+        help="Validate API/model/cost settings without making generation API calls.",
+    )
+    parser.add_argument(
+        "--verify-api",
+        action="store_true",
+        help=(
+            "Validate live settings and make metadata-only API calls to verify Anthropic/OpenAI "
+            "credentials and configured model access. No text/image generation is performed."
+        ),
     )
     args = parser.parse_args()
 
     errors = []
+    verified_messages: list[str] = []
     agents_config = yaml.safe_load((REPO_ROOT / "configs" / "agents.yaml").read_text(encoding="utf-8"))
     workflow = yaml.safe_load((REPO_ROOT / "configs" / "workflow.yaml").read_text(encoding="utf-8"))
     quality = yaml.safe_load((REPO_ROOT / "configs" / "quality.yaml").read_text(encoding="utf-8"))
@@ -168,8 +238,11 @@ def main() -> None:
         if not (REPO_ROOT / relative).exists():
             errors.append(f"Missing runtime file: {relative}")
 
-    if args.live_config:
+    if args.live_config or args.verify_api:
         validate_live_config(errors)
+
+    if args.verify_api and not errors:
+        verified_messages = verify_api_credentials(errors)
 
     if errors:
         print("SYSTEM VALIDATION: FAIL")
@@ -184,8 +257,12 @@ def main() -> None:
     print("Revision limit: 3")
     print("Target max cost: 400 JPY/final image")
     print("Runtime pipeline: configured")
-    if args.live_config:
-        print("Live configuration: PASS (no API calls were made)")
+    if args.live_config or args.verify_api:
+        print("Live configuration: PASS")
+    for message in verified_messages:
+        print(message)
+    if args.verify_api:
+        print("API credential/model verification: PASS (no text/image generation was performed)")
 
 
 if __name__ == "__main__":
