@@ -4,6 +4,7 @@ import os
 import re
 from datetime import date
 
+import yaml
 from dotenv import load_dotenv
 
 
@@ -12,9 +13,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = REPO_ROOT / ".env"
 load_dotenv(ENV_PATH)
 
+# YAML 1.2 does not allow most C0 control characters.
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def clean_input(value):
+    """Remove accidental control characters (for example Ctrl+V / 0x16)."""
+    return CONTROL_CHARS_RE.sub("", value).strip()
+
+
+def ask(prompt):
+    return clean_input(input(prompt))
+
 
 def sanitize_name(text):
-    text = text.strip().lower().replace(" ", "-")
+    text = clean_input(text).lower().replace(" ", "-")
     return re.sub(r"[^a-z0-9\-ぁ-んァ-ヶ一-龠]+", "-", text).strip("-")
 
 
@@ -39,7 +52,7 @@ def create_manifest(path, quantity):
 
 
 def read_quantity():
-    raw = input("制作枚数 (1〜100): ").strip() or "1"
+    raw = ask("制作枚数 (1〜100): ") or "1"
     try:
         quantity = int(raw)
     except ValueError:
@@ -48,6 +61,18 @@ def read_quantity():
     if not 1 <= quantity <= 100:
         raise SystemExit("制作枚数は1〜100の範囲で入力してください。")
     return quantity
+
+
+def write_project_yaml(path, project_data):
+    """Write valid UTF-8 YAML and let PyYAML quote/escape values safely."""
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        yaml.safe_dump(
+            project_data,
+            f,
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        )
 
 
 def main():
@@ -60,14 +85,14 @@ def main():
     projects_root = Path(projects_root_value)
     projects_root.mkdir(parents=True, exist_ok=True)
 
-    project_name = input("案件名: ").strip()
-    client_name = input("顧客名: ").strip()
-    objective = input("目的: ").strip()
-    deadline = input("納期 (YYYY-MM-DD): ").strip()
+    project_name = ask("案件名: ")
+    client_name = ask("顧客名: ")
+    objective = ask("目的: ")
+    deadline = ask("納期 (YYYY-MM-DD): ")
     quantity = read_quantity()
 
     project_id = next_project_id(projects_root)
-    slug = sanitize_name(client_name or project_name or "project")
+    slug = sanitize_name(client_name or project_name or "project") or "project"
     project_dir = projects_root / f"{project_id}_{slug}"
 
     for subdir in [
@@ -80,17 +105,18 @@ def main():
     ]:
         (project_dir / subdir).mkdir(parents=True, exist_ok=True)
 
-    project_yaml = f"""project_id: {project_id}
-project_name: {project_name}
-client_name: {client_name}
-objective: {objective}
-deadline: {deadline}
-quantity: {quantity}
-created_at: {date.today().isoformat()}
-status: planning
-"""
+    project_data = {
+        "project_id": project_id,
+        "project_name": project_name,
+        "client_name": client_name,
+        "objective": objective,
+        "deadline": deadline,
+        "quantity": quantity,
+        "created_at": date.today().isoformat(),
+        "status": "planning",
+    }
 
-    (project_dir / "project.yaml").write_text(project_yaml, encoding="utf-8")
+    write_project_yaml(project_dir / "project.yaml", project_data)
     create_manifest(project_dir / "creative-manifest.csv", quantity)
 
     print(f"案件を作成しました: {project_dir}")
