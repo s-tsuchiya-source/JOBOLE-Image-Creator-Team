@@ -27,6 +27,7 @@ def run_codex_gate(
     original_request: dict[str, Any],
     upstream_outputs: dict[str, Any],
     provider: OpenAIProvider | None = None,
+    image_path: Path | None = None,
 ) -> ProviderResult:
     schema = load_schema(QUALITY_SCHEMA)
     provider = provider or OpenAIProvider()
@@ -36,14 +37,21 @@ def run_codex_gate(
         "upstream_outputs": upstream_outputs,
         "instruction": (
             "Execute only the requested Quality Gate. Verify traceability, identify root "
-            "cause for every issue, and return a decision matching the schema."
+            "cause for every issue, and return a decision matching the schema. "
+            "For final_traceability_gate, visually inspect the supplied image as well as "
+            "all upstream outputs."
         ),
     }
-    result = provider.generate_json(
-        system_prompt=load_cco_prompt(),
-        user_prompt=json.dumps(input_payload, ensure_ascii=False, indent=2),
-        schema=schema,
-    )
+    kwargs = {
+        "system_prompt": load_cco_prompt(),
+        "user_prompt": json.dumps(input_payload, ensure_ascii=False, indent=2),
+        "schema": schema,
+    }
+    if image_path is not None:
+        result = provider.generate_json_with_image(image_path=image_path, **kwargs)
+    else:
+        result = provider.generate_json(**kwargs)
+
     validate_data(result.data, schema)
     if result.data.get("gate") != gate:
         raise ValueError(
