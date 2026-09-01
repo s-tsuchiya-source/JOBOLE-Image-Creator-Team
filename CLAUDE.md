@@ -5,6 +5,14 @@
 
 Claudeは専門職として制作を担当し、Codex Chief Creative Officerが工程設計・承認・差し戻し・最終品質管理を担う。
 
+## 認証・課金ルール
+Claude専門AgentはAnthropic APIを直接呼ばない。ローカルのClaude Code CLIを使用し、Claude.aiのPro / Max / Team / Enterprise等のログイン済みサブスクリプションを使う。
+
+- `ANTHROPIC_API_KEY` は不要。
+- 子プロセス実行時は親環境に `ANTHROPIC_API_KEY` が残っていても除去する。
+- APIキーによるPAYGへ意図せず切り替わらないことを優先する。
+- Claude Codeの利用上限は契約プランに従う。
+
 ## Claude専門職
 - Recruitment Analyst: 求人事実抽出
 - Production Director: 制作戦略・訴求配分
@@ -34,11 +42,11 @@ Claudeは専門職として制作を担当し、Codex Chief Creative Officerが�
 Claudeの成果物はそのまま次工程へ進まない。
 
 ```text
-Claude Specialist
+Claude Code Specialist
 ↓
 Schema Validation
 ↓
-Codex Quality Gate
+Codex CLI Quality Gate (ChatGPT login)
 ↓
 PASSのみ次工程
 ```
@@ -56,13 +64,20 @@ Gateは以下の4段階。
 python scripts/run_production.py PJ-0001 --dry-run
 ```
 
-live実行時:
+本実行時:
 
 ```bash
 python scripts/run_production.py PJ-0001
 ```
 
-`PRODUCTION_MODE=live` とAPI・モデル・料金設定が必要。
+`PRODUCTION_MODE=live` と、Claude Code / Codex CLIのログイン済み環境が必要。テキストAI用APIキーは不要。
+
+画像生成は `.env` の `IMAGE_BACKEND` で切り替える。
+
+```text
+IMAGE_BACKEND=local_webui  # 初回テスト・追加API費0円
+IMAGE_BACKEND=openai       # 本番画像API
+```
 
 ## 入力
 最低限必要なのは求人原稿。ヒアリング資料・参考画像・補足テキストは任意。
@@ -77,16 +92,16 @@ python scripts/run_production.py PJ-0001
 
 ## 基本ワークフロー
 1. Input normalization
-2. Recruitment Analyst
+2. Recruitment Analyst (Claude Code)
 3. Codex Fact Gate
-4. Production Director
+4. Production Director (Claude Code)
 5. Codex Strategy Gate
-6. Copy Director
-7. Art Director
-8. Prompt Designer
+6. Copy Director (Claude Code)
+7. Art Director (Claude Code)
+8. Prompt Designer (Claude Code)
 9. Codex Direction Gate
-10. Image Generation
-11. Creative Reviewer
+10. Image Generation (local or OpenAI)
+11. Creative Reviewer (Claude Code)
 12. Codex Final Traceability Gate
 13. Revision Loop（必要時、最大3回を原則）
 14. Human Final Approval
@@ -102,9 +117,10 @@ Prompt Designerの成果物もDirection Gateの対象であり、承認済みCop
 - Codexが比較・承認したものだけ次へ進む
 
 ## コスト原則
-- 400円/最終画像をハード上限とする。
-- 未承認Creativeが推定330円以上に達した場合、新しい有料自動修正を開始しない。
-- live実行時は料金設定が揃っていない状態で制作を開始しない。
+- Claude/Codexテキスト工程の増分APIコストは0円として管理する（既存契約の利用枠は消費する）。
+- `IMAGE_BACKEND=local_webui` は画像API増分コスト0円として扱う。
+- `IMAGE_BACKEND=openai` の場合のみ画像APIコストを400円/最終画像の上限管理へ含める。
+- OpenAI画像API利用時、未承認Creativeが推定330円以上に達した場合、新しい有料自動修正を開始しない。
 
 ## 参照優先度
 1. 自分の `.claude/agents/<role>.md`
