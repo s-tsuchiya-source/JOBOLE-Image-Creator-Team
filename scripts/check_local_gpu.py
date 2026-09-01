@@ -14,9 +14,8 @@ def main() -> None:
         print("OpenAI画像APIへの切替は IMAGE_BACKEND=openai で可能です。")
         return
 
-    query = (
-        "name,memory.total,memory.free,driver_version,compute_cap"
-    )
+    # Keep the query to fields that are widely supported across NVIDIA drivers.
+    query = "name,memory.total,memory.free,driver_version"
     completed = subprocess.run(
         [
             command,
@@ -39,9 +38,9 @@ def main() -> None:
     rows = []
     for line in completed.stdout.splitlines():
         parts = [part.strip() for part in line.split(",")]
-        if len(parts) < 5:
+        if len(parts) < 4:
             continue
-        name, memory_total, memory_free, driver, compute_cap = parts[:5]
+        name, memory_total, memory_free, driver = parts[:4]
         try:
             vram_mb = int(float(memory_total))
         except ValueError:
@@ -53,7 +52,6 @@ def main() -> None:
                 "vram_gb": round(vram_mb / 1024, 2) if vram_mb else None,
                 "free_mb": memory_free,
                 "driver": driver,
-                "compute_capability": compute_cap,
             }
         )
 
