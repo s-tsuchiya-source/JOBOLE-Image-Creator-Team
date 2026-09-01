@@ -13,9 +13,11 @@ models:
     incremental_api_cost: 0
   image_generation:
     provider_env: IMAGE_BACKEND
-    local_provider: local_webui
+    intel_local_provider: openvino_ovms
+    webui_local_provider: local_webui
     production_provider: openai_image_api
-    model_env: OPENAI_IMAGE_MODEL
+    openvino_model_env: OPENVINO_IMAGE_MODEL
+    openai_model_env: OPENAI_IMAGE_MODEL
     purpose: image_generation
 
 runtime:
@@ -24,5 +26,5 @@ runtime:
   claude_requires_subscription_login: true
   strip_openai_api_key_from_codex_child: true
   strip_anthropic_api_key_from_claude_child: true
-  image_backend_default: local_webui
+  image_backend_default: openvino_ovms
   dry_run_when_provider_unavailable: true
