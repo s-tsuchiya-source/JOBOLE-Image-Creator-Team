@@ -29,6 +29,17 @@ def _multiple_of_8(value: int) -> int:
     return max(64, int(round(value / 8.0) * 8))
 
 
+def _scaled_local_dimensions(width: int, height: int, max_side: int) -> tuple[int, int]:
+    """Preserve aspect ratio while keeping local VRAM usage predictable."""
+    if max(width, height) <= max_side:
+        return _multiple_of_8(width), _multiple_of_8(height)
+    scale = max_side / max(width, height)
+    return (
+        _multiple_of_8(max(64, int(width * scale))),
+        _multiple_of_8(max(64, int(height * scale))),
+    )
+
+
 class OpenAIImageGenerator:
     provider_name = "openai_image_api"
 
@@ -103,6 +114,9 @@ class LocalWebUIImageGenerator:
         self.cfg_scale = float(os.getenv("LOCAL_IMAGE_CFG_SCALE", "6.5"))
         self.sampler_name = os.getenv("LOCAL_IMAGE_SAMPLER", "DPM++ 2M")
         self.timeout_seconds = int(os.getenv("LOCAL_IMAGE_TIMEOUT_SEC", "600"))
+        self.max_side = int(os.getenv("LOCAL_IMAGE_MAX_SIDE", "1024"))
+        if self.max_side < 512:
+            raise ValueError("LOCAL_IMAGE_MAX_SIDE must be at least 512.")
 
     def _request_json(self, path: str, payload: dict | None = None) -> dict | list:
         url = self.base_url + path
@@ -134,6 +148,7 @@ class LocalWebUIImageGenerator:
             "base_url": self.base_url,
             "current_model": current_model,
             "available_models": len(models) if isinstance(models, list) else None,
+            "max_generation_side": self.max_side,
         }
 
     def generate(
@@ -145,8 +160,7 @@ class LocalWebUIImageGenerator:
         output_path: Path,
         negative_prompt: str = "",
     ) -> Path:
-        gen_width = _multiple_of_8(width)
-        gen_height = _multiple_of_8(height)
+        gen_width, gen_height = _scaled_local_dimensions(width, height, self.max_side)
         payload = {
             "prompt": prompt,
             "negative_prompt": negative_prompt,
