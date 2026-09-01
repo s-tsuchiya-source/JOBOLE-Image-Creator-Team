@@ -1,94 +1,116 @@
 # Quality Rules
 
 ## 品質の定義
-本システムにおける品質は「見た目が良いこと」だけではない。Original Request、求人事実、ヒアリング要望、制作戦略、コピー、Art Direction、Prompt、完成画像が一貫していることを最重要とする。
+Phase 1の品質は「見た目が良い」だけではない。
 
-## Quality Gate原則
-1. Recruitment Analysis後にCodex Fact Gateを通す。
-2. Production Strategy後にCodex Strategy Gateを通す。
-3. Copy / Art / Prompt Design後にCodex Direction Gateを通す。
-4. Creative Reviewer後にCodex Final Traceability Gateを通す。
-5. Gate未通過の成果物を次工程へ渡さない。
-
-## Traceability QA
-最終画像の各主張は上流へ遡れる必要がある。
-
+以下が一貫していることを重視する。
 ```text
-Generated Image
-  ↓
-Approved Prompt
-  ↓
-Approved Copy / Art Direction
-  ↓
-Creative Strategy
-  ↓
-Recruitment Analysis
-  ↓
-Original Job Posting / Hearing
+Original Request
+↓
+求人事実
+↓
+Creative Direction
+↓
+完成画像
 ```
 
-### 重大エラー
-- 給与・手当・勤務時間・休日・勤務地・応募条件の改変
+## 3段階の確認
+### 1. Codex Fact Check
+Recruitment AnalystのFact Sheetを元求人と照合する。
+
+重大確認項目:
+- 給与
+- 勤務地
+- 雇用形態
+- 仕事内容
+- 応募条件
+- 勤務時間
+- 休日
+- 福利厚生
+- 数値表現
+
+### 2. Codex Direction Approval
+Creative Directorの戦略・コピー・Art・Promptをまとめて確認する。
+
+確認:
+- ターゲットに根拠がある
+- 1画像1メッセージになっている
+- コピーの主張を求人事実へ遡れる
+- コピーとビジュアルが同じ訴求を強化する
+- 重要な日本語コピーを画像生成AI任せにしていない
+- ブランド・参考方向性と矛盾しない
+
+### 3. Codex Final QA
+Creative Reviewerの診断を参考に、Codex CCOが最終画像を直接確認する。
+
+確認:
+- Original Requestとの一致
+- 求人事実との一致
+- ターゲット適合
+- 訴求力
+- コピー品質
+- 視認性
+- 構図
+- ブランド適合
+- 画像破綻
+- 媒体規格
+
+## 重大エラー
+以下が1件でもあればPASSしない。
+- 給与・手当・時間・休日・勤務地・応募条件の改変
 - 求人原稿にない保証表現
-- 根拠不明のNo.1・最短・必ず等の表現
+- 根拠不明のNo.1・最短・必ず等
 - 必須コピーの誤字・文字欠け・判読不能
-- 指定サイズ・媒体規格違反
-- ヒアリングで禁止された表現の使用
+- 禁止表現の使用
+- 明確な画像破綻
+- 指定サイズ・媒体規格の重大違反
 
-重大エラーが1件でもあれば点数に関係なくPASSしない。
+## Claude Reviewerの位置づけ
+Reviewerは最終承認者ではない。
 
-## 必須確認項目
-- 伝えたい内容が一目で分かる
-- ターゲットに適した訴求になっている
-- コピーが読みやすい
-- コピーの根拠を求人事実へトレースできる
-- ブランドカラーやトーンが崩れていない
-- 誤字脱字がない
-- 画像の破綻がない
-- 媒体規格に沿っている
-- CopyとArtが同じ訴求を強化している
-- Promptが承認済みCopy/Artを勝手に変更していない
-- Original Requestと最終画像が一致している
+```text
+Creative Reviewer
+↓
+診断・問題抽出
+↓
+Codex CCO
+↓
+最終判断
+```
 
-## コンペ原則
-最高品質モードでは1案を直接採用しない。
-- Strategy: 原則5候補以上
-- Copy: 原則3候補以上
-- Art: 原則2候補以上
-- Codexが比較・選抜した後に次工程へ進む
+ReviewerがPASSでもCodexがNGなら修正する。
 
 ## 修正原則
-- 問題を `fact_error / strategy_error / copy_error / art_error / prompt_error / generation_error / review_error / format_error / brand_error / missing_information` に分類する。
-- 原因を作ったAgentまで差し戻す。
-- 同一Creativeの自動修正は原則3回まで。
-- 3回で解決しない場合は `needs_human_review` とする。
+- 原因に最も近い工程だけを修正する。
+- 事実問題 → Recruitment Analystまたは入力確認
+- 戦略/コピー/Art/Prompt問題 → Creative Director
+- 生成破綻/技術問題 → 画像生成
+- 原則3回で解消しない場合は人間へ確認する。
 
-## 認証・コスト原則
-### テキストAI
-- Claude専門AgentはClaude Codeのサブスクリプションログインを使用する。
-- Codex CCOはCodex IDE/CLIのChatGPTログインを使用する。
-- テキストAI用 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` は要求しない。
-- テキスト工程の増分APIコストは0円として記録する。
-- ただしClaude/ChatGPT契約プランの利用枠は消費する。
+## Phase 1の候補数
+複雑なAgent競争は行わない。
 
-### ローカル画像AI
-`IMAGE_BACKEND=local_webui` の場合:
-- 画像生成APIの増分費用は0円として記録する。
-- ローカルPCのGPU・電力・計算時間は別途発生する。
-- コストが0円でも自動修正上限3回は維持する。
+最低限:
+- Copy Candidates: 3案
+- Art Direction: Creative Directorが最も強い1方向を提示
+- 必要ならCodexが追加案を要求
 
-### OpenAI画像API
-`IMAGE_BACKEND=openai` の場合のみ以下の有料画像コストガードを適用する。
-- 最終画像1枚あたりのハード上限: 400円
-- 330円到達時点で、未承認Creativeの次の有料自動修正を開始しない。
-- 400円到達時は自動継続せず `needs_human_review` とする。
-- 画像API料金・予算管理為替が未設定なら有料画像生成を開始しない。
+品質上の理由がある場合だけ候補を増やす。
 
-## NG例
-- 根拠不明のNo.1表現
-- 確証のない数値訴求
-- 競合他社ロゴや名称の無断使用
-- 読めないほど小さい文字
-- AIが勝手に補った給与・待遇
-- Reviewerの点数だけを根拠にCodex Gateを省略すること
-- Claude/Codexテキスト工程を意図せずAPIキー課金へ切り替えること
+## 認証
+- Codex: ChatGPTログイン
+- Claude: Claude Codeログイン
+- テキストAI用APIキーを要求しない
+- OpenAI APIを使用する場合は画像生成だけ
+
+## コスト
+Phase 1ではローカル画像AIの詳細コスト管理やUsage Trackerを品質Gateにしない。
+
+OpenAI Image APIを使用する場合は、人間が定めた1枚あたり予算内で運用する。複雑な自動Budget GuardはPhase 2で再検討する。
+
+## Phase 1でやらないこと
+- 4段階以上の細分化Gate
+- Schemaを通すこと自体を目的にしたQA
+- Reviewer点数だけの自動PASS
+- 100枚量産前提の状態管理
+- ローカルAI基盤の安定化をクリエイティブ品質検証より優先すること
