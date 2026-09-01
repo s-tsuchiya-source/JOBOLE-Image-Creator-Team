@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from services.providers import AnthropicProvider, ProviderResult
+from services.providers import ClaudeCodeProvider, ProviderResult
 from services.schema_validator import load_schema, validate_data
 
 
@@ -45,12 +45,18 @@ def run_claude_agent(
     *,
     context: dict[str, Any],
     task: str,
-    provider: AnthropicProvider | None = None,
+    provider: ClaudeCodeProvider | None = None,
 ) -> ProviderResult:
+    """Execute one specialist via Claude Code subscription login.
+
+    No ANTHROPIC_API_KEY is required. The provider intentionally removes any
+    inherited ANTHROPIC_API_KEY before launching Claude Code so a stale key
+    cannot silently switch the run to pay-as-you-go API billing.
+    """
     agent = load_agent_config(agent_name)
     system_prompt = read_repo_file(agent["file"])
     schema = load_schema(agent["schema"])
-    provider = provider or AnthropicProvider()
+    provider = provider or ClaudeCodeProvider()
     result = provider.generate_json(
         system_prompt=system_prompt,
         user_prompt=build_user_prompt(context, task),
