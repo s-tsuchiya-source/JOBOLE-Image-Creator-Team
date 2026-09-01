@@ -114,11 +114,20 @@ class ClaudeCodeProvider:
         self.max_turns = int(os.getenv("CLAUDE_CLI_MAX_TURNS", "4"))
 
     @staticmethod
-    def _format_instruction(schema: dict) -> str:
+    def _build_stdin_prompt(system_prompt: str, user_prompt: str, schema: dict) -> str:
+        # Keep the command line short on Windows. Role instructions, source context,
+        # and schema can be large, so all of them travel through stdin.
         return (
-            "Return exactly one JSON object and no prose or markdown. "
-            "The JSON must satisfy this JSON Schema exactly:\n"
+            "<specialist_role>\n"
+            + system_prompt
+            + "\n</specialist_role>\n\n"
+            + "<required_output>\nReturn exactly one JSON object and no prose or markdown. "
+            + "The JSON must satisfy this JSON Schema exactly:\n"
             + json.dumps(schema, ensure_ascii=False)
+            + "\n</required_output>\n\n"
+            + "<work_input>\n"
+            + user_prompt
+            + "\n</work_input>"
         )
 
     def _execute(
@@ -129,7 +138,6 @@ class ClaudeCodeProvider:
         schema: dict,
         image_path: Path | None = None,
     ) -> ProviderResult:
-        full_system = system_prompt + "\n\n" + self._format_instruction(schema)
         args = [
             "-p",
             "--output-format",
@@ -138,16 +146,16 @@ class ClaudeCodeProvider:
             self.model,
             "--max-turns",
             str(self.max_turns),
-            "--system-prompt",
-            full_system,
         ]
-        prompt = user_prompt
+        prompt = self._build_stdin_prompt(system_prompt, user_prompt, schema)
         if image_path is not None:
             image_path = image_path.resolve()
             args.extend(["--add-dir", str(image_path.parent)])
             prompt += (
-                "\n\nIMPORTANT: visually inspect the local image file using the Read tool before "
-                f"answering. Image path: {image_path}"
+                "\n\n<image_review_requirement>\n"
+                "Visually inspect the local image file using the Read tool before answering. "
+                f"Image path: {image_path}\n"
+                "</image_review_requirement>"
             )
 
         completed = _run_cli(
@@ -159,7 +167,14 @@ class ClaudeCodeProvider:
             # Claude subscription instead of PAYG Console billing.
             env=_subscription_env("ANTHROPIC_API_KEY"),
         )
-        wrapper = json.loads((completed.stdout or "").strip())
+        raw_stdout = (completed.stdout or "").strip()
+        try:
+            wrapper = json.loads(raw_stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "Claude Code did not return valid --output-format json output. "
+                f"stdout={raw_stdout[:1000]!r}"
+            ) from exc
         if wrapper.get("is_error"):
             raise RuntimeError(f"Claude Code returned an error: {wrapper}")
         result_text = wrapper.get("result")
