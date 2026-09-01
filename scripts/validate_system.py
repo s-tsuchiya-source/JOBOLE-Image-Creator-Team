@@ -11,25 +11,33 @@ import tempfile
 
 import yaml
 from dotenv import load_dotenv
-from jsonschema import Draft202012Validator
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-load_dotenv(REPO_ROOT / ".env")
+# For local project operation, .env is the source of truth.
+load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.image_generator import check_image_backend
 
 
 REQUIRED_AGENTS = [
     "recruitment_analyst",
-    "production_director",
-    "copy_director",
-    "art_director",
-    "prompt_designer",
+    "creative_director",
     "creative_reviewer",
+]
+
+EXPECTED_WORKFLOW = [
+    "intake",
+    "recruitment_analysis",
+    "codex_fact_check",
+    "creative_direction",
+    "codex_direction_approval",
+    "image_generation",
+    "creative_review",
+    "codex_final_qa",
 ]
 
 
@@ -68,12 +76,58 @@ def _run_version(command: str) -> tuple[bool, str]:
     return completed.returncode == 0, text or executable
 
 
-def validate_text_runtime(errors: list[str], messages: list[str]) -> None:
-    """Validate only Claude Code / Codex CLI availability.
+def validate_structure(errors: list[str], messages: list[str]) -> None:
+    agents_path = REPO_ROOT / "configs" / "agents.yaml"
+    workflow_path = REPO_ROOT / "configs" / "workflow.yaml"
+    agents = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
 
-    This intentionally does not validate the image backend so --verify-login can
-    be used before a local image server is installed.
-    """
+    chief = agents.get("chief", {}).get("codex_cco", {})
+    cco_path = REPO_ROOT / str(chief.get("file") or "")
+    if not chief or not cco_path.exists():
+        errors.append("Codex CCO role is missing")
+
+    configured_agents = agents.get("agents", {})
+    for name in REQUIRED_AGENTS:
+        config = configured_agents.get(name)
+        if not config:
+            errors.append(f"Missing active Claude specialist: {name}")
+            continue
+        role_path = REPO_ROOT / str(config.get("file") or "")
+        if not role_path.exists():
+            errors.append(f"Missing role file: {role_path}")
+
+    extra_active = sorted(set(configured_agents) - set(REQUIRED_AGENTS))
+    if extra_active:
+        errors.append("Unexpected active Claude specialists: " + ", ".join(extra_active))
+
+    steps = workflow.get("workflow", {}).get("steps", [])
+    positions = {step: index for index, step in enumerate(steps)}
+    for step in EXPECTED_WORKFLOW:
+        if step not in positions:
+            errors.append(f"Workflow missing Phase 1 step: {step}")
+    for previous, following in zip(EXPECTED_WORKFLOW, EXPECTED_WORKFLOW[1:]):
+        if previous in positions and following in positions and positions[previous] >= positions[following]:
+            errors.append(f"Workflow order invalid: {previous} must precede {following}")
+
+    deprecated_run = REPO_ROOT / "scripts" / "run_production.py"
+    if not deprecated_run.exists():
+        errors.append("Deprecated run_production shim is missing")
+
+    required_python_utilities = [
+        "scripts/create_project_from_intake.py",
+        "scripts/input_loader.py",
+        "services/image_generator.py",
+        "services/overlay_renderer.py",
+    ]
+    for relative in required_python_utilities:
+        if not (REPO_ROOT / relative).exists():
+            errors.append(f"Missing Phase 1 utility: {relative}")
+
+    messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + Python file/image utilities")
+
+
+def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
     claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
     codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
 
@@ -89,82 +143,19 @@ def validate_text_runtime(errors: list[str], messages: list[str]) -> None:
     else:
         errors.append(f"Codex CLI unavailable: {detail}")
 
-    mode = os.getenv("PRODUCTION_MODE", "dry-run").strip().lower()
-    if mode not in {"dry-run", "live"}:
-        errors.append("PRODUCTION_MODE must be dry-run or live")
-
-    if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
-        messages.append(
-            "NOTE: ANTHROPIC_API_KEY exists in parent .env but will be stripped from Claude Code child processes."
-        )
-
-
-def validate_image_runtime(errors: list[str], messages: list[str]) -> None:
-    backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
-    webui_names = {"local", "local_webui", "webui", "forge", "automatic1111"}
-    openvino_names = {"openvino", "openvino_ovms", "ovms", "intel_openvino"}
-
-    if backend in webui_names:
-        url = (os.getenv("LOCAL_IMAGE_API_URL") or "").strip()
-        if not url:
-            errors.append("LOCAL_IMAGE_API_URL is required for local WebUI image mode")
-        else:
-            messages.append(f"Image backend: local_webui ({url})")
-        return
-
-    if backend in openvino_names:
-        url = (os.getenv("OPENVINO_IMAGE_API_URL") or "").strip()
-        model = (os.getenv("OPENVINO_IMAGE_MODEL") or "").strip()
-        missing = []
-        if not url:
-            missing.append("OPENVINO_IMAGE_API_URL")
-        if not model:
-            missing.append("OPENVINO_IMAGE_MODEL")
-        if missing:
-            errors.append("OpenVINO image backend missing: " + ", ".join(missing))
-        else:
-            messages.append(f"Image backend: OpenVINO OVMS ({url}, model={model})")
-        return
-
-    if backend in {"openai", "openai_api"}:
-        required = (
-            "OPENAI_API_KEY",
-            "OPENAI_IMAGE_MODEL",
-            "USDJPY_RATE",
-            "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
-        )
-        missing = [name for name in required if not (os.getenv(name) or "").strip()]
-        if missing:
-            errors.append("OpenAI image backend missing: " + ", ".join(missing))
-        if os.getenv("OPENAI_IMAGE_QUALITY", "high").strip().lower() != "high":
-            errors.append("OPENAI_IMAGE_QUALITY must be high in maximum-quality mode")
-        messages.append("Image backend: OpenAI Image API")
-        return
-
-    errors.append(
-        f"Unsupported IMAGE_BACKEND={backend!r}. Use openvino_ovms, local_webui, or openai."
-    )
-
 
 def verify_logins(errors: list[str], messages: list[str]) -> None:
-    claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
-    codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
-    claude_exe = _resolved(claude_command)
-    codex_exe = _resolved(codex_command)
+    claude_exe = _resolved(os.getenv("CLAUDE_CLI_COMMAND", "claude"))
+    codex_exe = _resolved(os.getenv("CODEX_CLI_COMMAND", "codex"))
     if not claude_exe or not codex_exe:
-        errors.append("Cannot verify login until both Claude Code and Codex CLI are installed.")
+        errors.append("Cannot verify login until Claude Code and Codex CLI are installed")
         return
 
-    claude_args = [
-        "-p",
-        "--output-format",
-        "json",
-        "--max-turns",
-        "1",
-        "Return exactly the text OK and nothing else.",
-    ]
     claude = subprocess.run(
-        _windows_safe(claude_exe, claude_args),
+        _windows_safe(
+            claude_exe,
+            ["-p", "--output-format", "json", "--max-turns", "1", "Return exactly OK."],
+        ),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -182,18 +173,20 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
 
     with tempfile.TemporaryDirectory(prefix="jobole_login_") as tmpdir:
         output_path = Path(tmpdir) / "codex.txt"
-        codex_args = [
-            "exec",
-            "--ephemeral",
-            "--sandbox",
-            "read-only",
-            "--output-last-message",
-            str(output_path),
-            "-",
-        ]
         codex = subprocess.run(
-            _windows_safe(codex_exe, codex_args),
-            input="Return exactly the text OK and nothing else.",
+            _windows_safe(
+                codex_exe,
+                [
+                    "exec",
+                    "--ephemeral",
+                    "--sandbox",
+                    "read-only",
+                    "--output-last-message",
+                    str(output_path),
+                    "-",
+                ],
+            ),
+            input="Return exactly OK.",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -210,120 +203,19 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
             errors.append("Codex login verification failed: " + (codex.stderr or codex.stdout).strip())
 
 
-def validate_structure(errors: list[str]) -> None:
-    agents_config = yaml.safe_load((REPO_ROOT / "configs" / "agents.yaml").read_text(encoding="utf-8"))
-    workflow = yaml.safe_load((REPO_ROOT / "configs" / "workflow.yaml").read_text(encoding="utf-8"))
-    quality = yaml.safe_load((REPO_ROOT / "configs" / "quality.yaml").read_text(encoding="utf-8"))
-
-    cco_file = REPO_ROOT / agents_config["chief"]["codex_cco"]["file"]
-    if not cco_file.exists():
-        errors.append(f"Missing Codex CCO role: {cco_file}")
-
-    for name in REQUIRED_AGENTS:
-        config = agents_config.get("agents", {}).get(name)
-        if not config:
-            errors.append(f"Missing agent config: {name}")
-            continue
-        role_path = REPO_ROOT / config["file"]
-        schema_path = REPO_ROOT / config["schema"]
-        if not role_path.exists():
-            errors.append(f"Missing role file: {role_path}")
-        if not schema_path.exists():
-            errors.append(f"Missing schema: {schema_path}")
-            continue
-        try:
-            Draft202012Validator.check_schema(
-                json.loads(schema_path.read_text(encoding="utf-8"))
-            )
-        except Exception as exc:
-            errors.append(f"Invalid schema {schema_path}: {exc}")
-
-    quality_schema = REPO_ROOT / "schemas" / "quality-gate.schema.json"
-    try:
-        Draft202012Validator.check_schema(
-            json.loads(quality_schema.read_text(encoding="utf-8"))
-        )
-    except Exception as exc:
-        errors.append(f"Invalid quality gate schema: {exc}")
-
-    expected_order = [
-        "recruitment_analysis",
-        "codex_fact_gate",
-        "production_strategy",
-        "codex_strategy_gate",
-        "copy_direction",
-        "art_direction",
-        "prompt_design",
-        "codex_direction_gate",
-        "image_generation",
-        "creative_review",
-        "codex_final_traceability_gate",
-    ]
-    steps = workflow.get("workflow", {}).get("steps", [])
-    positions = {step: index for index, step in enumerate(steps)}
-    for previous, following in zip(expected_order, expected_order[1:]):
-        if previous not in positions or following not in positions:
-            errors.append(f"Workflow missing required step: {previous} or {following}")
-        elif positions[previous] >= positions[following]:
-            errors.append(f"Workflow order invalid: {previous} must precede {following}")
-
-    q = quality.get("quality", {})
-    if int(q.get("max_revision_count", -1)) != 3:
-        errors.append("max_revision_count must currently be 3 for quality-first mode")
-    budget = q.get("budget", {})
-    if float(budget.get("target_max_yen_per_final_image", 0)) != 400:
-        errors.append("target_max_yen_per_final_image must be 400")
-    if float(budget.get("stop_and_escalate_yen_per_final_image", 0)) != 400:
-        errors.append("stop_and_escalate_yen_per_final_image must be 400")
-
-    required_runtime_files = [
-        "services/providers.py",
-        "services/agent_runner.py",
-        "services/quality_gate.py",
-        "services/pipeline_stages.py",
-        "services/image_generator.py",
-        "services/image_review.py",
-        "services/creative_pipeline.py",
-        "services/manifest.py",
-        "services/usage_tracker.py",
-        "scripts/run_production.py",
-    ]
-    for relative in required_runtime_files:
-        if not (REPO_ROOT / relative).exists():
-            errors.append(f"Missing runtime file: {relative}")
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--runtime-config",
-        action="store_true",
-        help="Check Claude/Codex CLI executables and selected image backend configuration without generation.",
-    )
-    parser.add_argument(
-        "--verify-login",
-        action="store_true",
-        help="Verify Claude/Codex subscription login independently of image backend configuration.",
-    )
-    parser.add_argument(
-        "--verify-image",
-        action="store_true",
-        help="Check the selected image backend without generating an image.",
-    )
+    parser = argparse.ArgumentParser(description="Validate the simplified Phase 1 architecture.")
+    parser.add_argument("--runtime-config", action="store_true")
+    parser.add_argument("--verify-login", action="store_true")
+    parser.add_argument("--verify-image", action="store_true")
     args = parser.parse_args()
 
     errors: list[str] = []
     messages: list[str] = []
-    validate_structure(errors)
+    validate_structure(errors, messages)
 
-    if args.runtime_config:
-        validate_text_runtime(errors, messages)
-        validate_image_runtime(errors, messages)
-    elif args.verify_login:
-        validate_text_runtime(errors, messages)
-    elif args.verify_image:
-        validate_image_runtime(errors, messages)
-
+    if args.runtime_config or args.verify_login:
+        validate_cli_runtime(errors, messages)
     if args.verify_login and not errors:
         verify_logins(errors, messages)
     if args.verify_image and not errors:
@@ -340,18 +232,16 @@ def main() -> None:
         raise SystemExit(2)
 
     print("SYSTEM VALIDATION: PASS")
-    print(f"Agents: {len(REQUIRED_AGENTS)} Claude specialists")
-    print("Codex CCO: ChatGPT-login CLI")
-    print("Quality Gates: 4")
-    print("Revision limit: 3")
-    print("Target max cost: 400 JPY/final image")
+    print("Claude specialists: 3")
+    print("Codex CCO: VSCode highest authority")
+    print("Python AI orchestration: DISABLED")
     print("Text API keys required: NO")
     for message in messages:
         print(message)
     if args.verify_login:
         print("Subscription login verification: PASS")
     if args.verify_image:
-        print("Image backend verification: PASS (no image was generated)")
+        print("Image backend verification: PASS")
 
 
 if __name__ == "__main__":
