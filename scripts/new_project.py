@@ -169,15 +169,17 @@ def main():
         "input_status": "not_checked",
         "quality_mode": "quality_first",
         "human_final_approval_required": True,
+        "intake_channel": "manual_maintenance",
     }
 
     write_project_yaml(project_dir / "project.yaml", project_data)
     create_manifest(project_dir / "creative-manifest.csv", project_id, quantity)
 
     print(f"案件を作成しました: {project_dir}")
-    print("次に、求人原稿を 00_request/inbox/job_posting/ へ、")
-    print("ヒアリング資料を 00_request/inbox/hearing/ へ配置してください。")
-    print("参考画像・ロゴ等は 00_request/inbox/references/ へ配置できます。")
+    print("求人原稿（必須）を 00_request/inbox/job_posting/ へ配置してください。")
+    print("ヒアリング資料（任意）は 00_request/inbox/hearing/ へ配置できます。")
+    print("参考画像・ロゴ等（任意）は 00_request/inbox/references/ へ配置できます。")
+    print("通常運用では、この手動コマンドではなくVSCode Codexの自動受付を使用します。")
 
 
 if __name__ == "__main__":
