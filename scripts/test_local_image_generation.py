@@ -12,20 +12,48 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 load_dotenv(REPO_ROOT / ".env")
 
-from services.image_generator import LocalWebUIImageGenerator
+from services.image_generator import check_image_backend, create_image_generator
+
+
+LOCAL_BACKENDS = {
+    "local",
+    "local_webui",
+    "webui",
+    "forge",
+    "automatic1111",
+    "openvino",
+    "openvino_ovms",
+    "ovms",
+    "intel",
+}
 
 
 def main() -> None:
-    backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
-    if backend not in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+    backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
+    if backend not in LOCAL_BACKENDS:
         raise SystemExit(
-            "このテストはローカル画像AI専用です。.env を IMAGE_BACKEND=local_webui にしてください。"
+            "このテストはローカル画像AI専用です。"
+            "IMAGE_BACKEND=openvino_ovms または local_webui にしてください。"
         )
 
+    print("Checking selected local image backend...")
+    info = check_image_backend()
+    if not info.get("ok"):
+        raise SystemExit(f"Local image backend is not ready: {info}")
+
     output = REPO_ROOT / "tmp" / "local-image-test.png"
-    generator = LocalWebUIImageGenerator()
-    print(f"Local WebUI: {generator.base_url}")
+    generator = create_image_generator()
+    provider = getattr(generator, "provider_name", backend)
+    model = getattr(generator, "model", "")
+    base_url = getattr(generator, "base_url", "")
+
+    print(f"Image backend: {provider}")
+    if base_url:
+        print(f"Endpoint: {base_url}")
+    if model:
+        print(f"Model: {model}")
     print("512x512 のローカル画像を1枚生成します。クラウド画像API料金は発生しません。")
+
     generator.generate(
         prompt=(
             "clean professional Japanese recruitment advertising background, "
@@ -39,7 +67,9 @@ def main() -> None:
         height=512,
         output_path=output,
     )
+
     print("LOCAL IMAGE GENERATION: PASS")
+    print(f"Backend: {provider}")
     print(f"Output: {output}")
     print("Incremental cloud image API cost: 0 JPY")
 
