@@ -172,7 +172,12 @@ def write_context_files(context: dict) -> None:
             f"format={row.get('format', '')}"
         )
 
-    (TMP_ROOT / "context.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # UTF-8 with BOM keeps Japanese readable in Windows PowerShell 5.x Get-Content
+    # while remaining safe for VS Code / Claude / Codex to read as Markdown.
+    (TMP_ROOT / "context.md").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8-sig",
+    )
 
 
 def main() -> None:
