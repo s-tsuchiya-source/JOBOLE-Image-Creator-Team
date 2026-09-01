@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreativeBenchmarkEntry",
+  "type": "object",
+  "required": ["benchmark_id", "label", "image_path", "reasons", "applicable_to"],
+  "properties": {
+    "benchmark_id": {"type": "string"},
+    "label": {"enum": ["golden", "rejected"]},
+    "image_path": {"type": "string"},
+    "job_category": {"type": ["string", "null"]},
+    "media": {"type": ["string", "null"]},
+    "format": {"type": ["string", "null"]},
+    "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "applicable_to": {"type": "array", "items": {"type": "string"}},
+    "avoid_patterns": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}
