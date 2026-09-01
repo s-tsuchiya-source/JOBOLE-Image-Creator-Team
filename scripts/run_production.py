@@ -97,6 +97,7 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
     add("quality_config", QUALITY_CONFIG.exists(), str(QUALITY_CONFIG))
 
     mode = os.getenv("PRODUCTION_MODE", "dry-run").strip().lower()
+    backend = os.getenv("IMAGE_BACKEND", "openvino_ovms").strip().lower()
     if mode == "live":
         claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
         codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
@@ -105,13 +106,23 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
         add("claude_code_cli", bool(claude_path), claude_path or f"missing: {claude_command}")
         add("codex_cli", bool(codex_path), codex_path or f"missing: {codex_command}")
 
-        backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
-        if backend in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+        local_names = {
+            "local",
+            "local_webui",
+            "webui",
+            "forge",
+            "automatic1111",
+            "openvino",
+            "openvino_ovms",
+            "ovms",
+            "intel_openvino",
+        }
+        if backend in local_names:
             try:
                 info = check_image_backend()
                 add("image_backend", bool(info.get("ok")), json.dumps(info, ensure_ascii=False))
             except Exception as exc:
-                add("image_backend", False, f"local WebUI unavailable: {exc}")
+                add("image_backend", False, f"local image backend unavailable: {exc}")
         elif backend in {"openai", "openai_api"}:
             required = {
                 "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
@@ -133,7 +144,7 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
     return {
         "mode": mode,
         "text_ai": "claude_code_subscription + codex_chatgpt_login",
-        "image_backend": os.getenv("IMAGE_BACKEND", "local_webui"),
+        "image_backend": backend,
         "ready": all(check["passed"] for check in checks),
         "checks": checks,
     }
@@ -170,7 +181,7 @@ def write_production_summary(
         "creative_statuses": statuses,
         "estimated_incremental_api_cost_yen": tracker.total_estimated_cost_yen(),
         "text_ai_billing": "subscription_login",
-        "image_backend": os.getenv("IMAGE_BACKEND", "local_webui"),
+        "image_backend": os.getenv("IMAGE_BACKEND", "openvino_ovms"),
         "delivery_dir": str(project_dir / "05_delivery"),
         "contact_sheet": str(contact_sheet) if contact_sheet else None,
         "completed_at": datetime.now().isoformat(timespec="seconds"),
@@ -253,14 +264,14 @@ def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
         project["human_approval_status"] = "pending"
         project["estimated_incremental_api_cost_yen"] = tracker.total_estimated_cost_yen()
         project["text_ai_billing"] = "subscription_login"
-        project["image_backend"] = os.getenv("IMAGE_BACKEND", "local_webui")
+        project["image_backend"] = os.getenv("IMAGE_BACKEND", "openvino_ovms")
         save_project_yaml(project_dir / "project.yaml", project)
         contact_sheet = build_contact_sheet(project_dir)
         write_production_summary(project_dir, project, tracker, contact_sheet)
 
         print("Production completed successfully.")
         print(f"Project: {project.get('project_id')}")
-        print(f"Image backend: {os.getenv('IMAGE_BACKEND', 'local_webui')}")
+        print(f"Image backend: {os.getenv('IMAGE_BACKEND', 'openvino_ovms')}")
         print(f"Incremental API cost estimate: {tracker.total_estimated_cost_yen()} JPY")
         print(f"Delivery candidates: {project_dir / '05_delivery'}")
         if contact_sheet:
