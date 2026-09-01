@@ -4,7 +4,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
 
 import yaml
 from dotenv import load_dotenv
@@ -17,6 +20,9 @@ if str(REPO_ROOT) not in sys.path:
 
 load_dotenv(REPO_ROOT / ".env")
 
+from services.image_generator import check_image_backend
+
+
 REQUIRED_AGENTS = [
     "recruitment_analyst",
     "production_director",
@@ -26,138 +32,156 @@ REQUIRED_AGENTS = [
     "creative_reviewer",
 ]
 
-REQUIRED_LIVE_ENV = [
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_MODEL",
-    "OPENAI_API_KEY",
-    "OPENAI_CCO_MODEL",
-    "OPENAI_IMAGE_MODEL",
-    "USDJPY_RATE",
-    "ANTHROPIC_INPUT_USD_PER_M",
-    "ANTHROPIC_OUTPUT_USD_PER_M",
-    "OPENAI_CCO_INPUT_USD_PER_M",
-    "OPENAI_CCO_OUTPUT_USD_PER_M",
-    "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
-]
 
-NUMERIC_LIVE_ENV = {
-    "USDJPY_RATE",
-    "ANTHROPIC_INPUT_USD_PER_M",
-    "ANTHROPIC_OUTPUT_USD_PER_M",
-    "OPENAI_CCO_INPUT_USD_PER_M",
-    "OPENAI_CCO_OUTPUT_USD_PER_M",
-    "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION",
-}
-
-PLACEHOLDER_MARKERS = (
-    "ここに",
-    "your_api_key",
-    "your-api-key",
-    "replace_me",
-    "changeme",
-    "<api",
-    "<your",
-)
+def _resolved(command: str) -> str | None:
+    return shutil.which(command)
 
 
-def _looks_like_placeholder(value: str) -> bool:
-    lowered = value.strip().lower()
-    return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
+def _windows_safe(executable: str, args: list[str]) -> list[str]:
+    if os.name == "nt" and Path(executable).suffix.lower() in {".cmd", ".bat"}:
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", executable, *args]
+    return [executable, *args]
 
 
-def validate_live_config(errors: list[str]) -> None:
-    for name in REQUIRED_LIVE_ENV:
-        raw = os.getenv(name)
-        if raw is None or not raw.strip():
-            errors.append(f"Missing live setting: {name}")
-            continue
-        if _looks_like_placeholder(raw):
-            errors.append(f"Live setting still looks like a placeholder: {name}")
-            continue
-        if name in NUMERIC_LIVE_ENV:
-            try:
-                value = float(raw)
-            except ValueError:
-                errors.append(f"Live setting must be numeric: {name}")
-                continue
-            if value <= 0:
-                errors.append(f"Live setting must be > 0: {name}")
+def _clean_env(*keys: str) -> dict[str, str]:
+    env = dict(os.environ)
+    for key in keys:
+        env.pop(key, None)
+    return env
 
-    quality = os.getenv("OPENAI_IMAGE_QUALITY", "high").strip().lower()
-    if quality != "high":
-        errors.append(
-            f"OPENAI_IMAGE_QUALITY must be high for maximum-quality mode; got {quality!r}"
-        )
+
+def _run_version(command: str) -> tuple[bool, str]:
+    executable = _resolved(command)
+    if not executable:
+        return False, f"command not found: {command}"
+    completed = subprocess.run(
+        _windows_safe(executable, ["--version"]),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+        check=False,
+    )
+    text = (completed.stdout or completed.stderr or "").strip()
+    return completed.returncode == 0, text or executable
+
+
+def validate_runtime_config(errors: list[str], messages: list[str]) -> None:
+    claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
+    codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
+
+    ok, detail = _run_version(claude_command)
+    if ok:
+        messages.append(f"Claude Code CLI: OK ({detail})")
+    else:
+        errors.append(f"Claude Code CLI unavailable: {detail}")
+
+    ok, detail = _run_version(codex_command)
+    if ok:
+        messages.append(f"Codex CLI: OK ({detail})")
+    else:
+        errors.append(f"Codex CLI unavailable: {detail}")
 
     mode = os.getenv("PRODUCTION_MODE", "dry-run").strip().lower()
-    if mode != "live":
-        errors.append(
-            "PRODUCTION_MODE is not live. Set PRODUCTION_MODE=live only after all live settings are ready."
+    if mode not in {"dry-run", "live"}:
+        errors.append("PRODUCTION_MODE must be dry-run or live")
+
+    backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
+    local_names = {"local", "local_webui", "webui", "forge", "automatic1111"}
+    if backend in local_names:
+        url = (os.getenv("LOCAL_IMAGE_API_URL") or "").strip()
+        if not url:
+            errors.append("LOCAL_IMAGE_API_URL is required for local image mode")
+        else:
+            messages.append(f"Image backend: local_webui ({url})")
+    elif backend in {"openai", "openai_api"}:
+        required = ("OPENAI_API_KEY", "OPENAI_IMAGE_MODEL", "USDJPY_RATE", "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION")
+        missing = [name for name in required if not (os.getenv(name) or "").strip()]
+        if missing:
+            errors.append("OpenAI image backend missing: " + ", ".join(missing))
+        if os.getenv("OPENAI_IMAGE_QUALITY", "high").strip().lower() != "high":
+            errors.append("OPENAI_IMAGE_QUALITY must be high in maximum-quality mode")
+        messages.append("Image backend: OpenAI Image API")
+    else:
+        errors.append(f"Unsupported IMAGE_BACKEND={backend!r}")
+
+    if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
+        messages.append(
+            "NOTE: ANTHROPIC_API_KEY exists in parent .env but will be stripped from Claude Code child processes."
+        )
+    if (os.getenv("OPENAI_API_KEY") or "").strip() and backend in local_names:
+        messages.append(
+            "NOTE: OPENAI_API_KEY exists but local image mode does not use it; Codex child processes also strip it."
         )
 
 
-def verify_api_credentials(errors: list[str]) -> list[str]:
-    """Verify credentials/model access without running text or image generation."""
-    verified: list[str] = []
+def verify_logins(errors: list[str], messages: list[str]) -> None:
+    claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
+    codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
+    claude_exe = _resolved(claude_command)
+    codex_exe = _resolved(codex_command)
+    if not claude_exe or not codex_exe:
+        errors.append("Cannot verify login until both Claude Code and Codex CLI are installed.")
+        return
 
-    anthropic_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
-    anthropic_model = (os.getenv("ANTHROPIC_MODEL") or "").strip()
-    if anthropic_key and anthropic_model:
-        try:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=anthropic_key)
-            model = client.models.retrieve(anthropic_model)
-            verified.append(f"Anthropic auth/model: OK ({getattr(model, 'id', anthropic_model)})")
-        except Exception as exc:
-            errors.append(
-                "Anthropic credential/model verification failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    cco_model = (os.getenv("OPENAI_CCO_MODEL") or "").strip()
-    image_model = (os.getenv("OPENAI_IMAGE_MODEL") or "").strip()
-    if openai_key and cco_model:
-        try:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=openai_key)
-            model = client.models.retrieve(cco_model)
-            verified.append(f"OpenAI auth/CCO model: OK ({getattr(model, 'id', cco_model)})")
-            if image_model:
-                image = client.models.retrieve(image_model)
-                verified.append(
-                    f"OpenAI image model: OK ({getattr(image, 'id', image_model)})"
-                )
-        except Exception as exc:
-            errors.append(
-                "OpenAI credential/model verification failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-    return verified
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--live-config",
-        action="store_true",
-        help="Validate API/model/cost settings without making generation API calls.",
+    claude_args = [
+        "-p",
+        "--output-format",
+        "json",
+        "--max-turns",
+        "1",
+        "Return exactly the text OK and nothing else.",
+    ]
+    claude = subprocess.run(
+        _windows_safe(claude_exe, claude_args),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_clean_env("ANTHROPIC_API_KEY"),
+        cwd=str(REPO_ROOT),
+        timeout=120,
+        check=False,
     )
-    parser.add_argument(
-        "--verify-api",
-        action="store_true",
-        help=(
-            "Validate live settings and make metadata-only API calls to verify Anthropic/OpenAI "
-            "credentials and configured model access. No text/image generation is performed."
-        ),
-    )
-    args = parser.parse_args()
+    if claude.returncode == 0:
+        messages.append("Claude Code subscription login: OK")
+    else:
+        errors.append("Claude Code login verification failed: " + (claude.stderr or claude.stdout).strip())
 
-    errors = []
-    verified_messages: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="jobole_login_") as tmpdir:
+        output_path = Path(tmpdir) / "codex.txt"
+        codex_args = [
+            "exec",
+            "--ephemeral",
+            "--sandbox",
+            "read-only",
+            "--output-last-message",
+            str(output_path),
+            "-",
+        ]
+        codex = subprocess.run(
+            _windows_safe(codex_exe, codex_args),
+            input="Return exactly the text OK and nothing else.",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_clean_env("OPENAI_API_KEY"),
+            cwd=str(REPO_ROOT),
+            timeout=180,
+            check=False,
+        )
+        if codex.returncode == 0:
+            messages.append("Codex ChatGPT login: OK")
+        else:
+            errors.append("Codex login verification failed: " + (codex.stderr or codex.stdout).strip())
+
+
+def validate_structure(errors: list[str]) -> None:
     agents_config = yaml.safe_load((REPO_ROOT / "configs" / "agents.yaml").read_text(encoding="utf-8"))
     workflow = yaml.safe_load((REPO_ROOT / "configs" / "workflow.yaml").read_text(encoding="utf-8"))
     quality = yaml.safe_load((REPO_ROOT / "configs" / "quality.yaml").read_text(encoding="utf-8"))
@@ -179,8 +203,9 @@ def main() -> None:
             errors.append(f"Missing schema: {schema_path}")
             continue
         try:
-            schema = json.loads(schema_path.read_text(encoding="utf-8"))
-            Draft202012Validator.check_schema(schema)
+            Draft202012Validator.check_schema(
+                json.loads(schema_path.read_text(encoding="utf-8"))
+            )
         except Exception as exc:
             errors.append(f"Invalid schema {schema_path}: {exc}")
 
@@ -192,7 +217,6 @@ def main() -> None:
     except Exception as exc:
         errors.append(f"Invalid quality gate schema: {exc}")
 
-    steps = workflow.get("workflow", {}).get("steps", [])
     expected_order = [
         "recruitment_analysis",
         "codex_fact_gate",
@@ -206,6 +230,7 @@ def main() -> None:
         "creative_review",
         "codex_final_traceability_gate",
     ]
+    steps = workflow.get("workflow", {}).get("steps", [])
     positions = {step: index for index, step in enumerate(steps)}
     for previous, following in zip(expected_order, expected_order[1:]):
         if previous not in positions or following not in positions:
@@ -238,11 +263,40 @@ def main() -> None:
         if not (REPO_ROOT / relative).exists():
             errors.append(f"Missing runtime file: {relative}")
 
-    if args.live_config or args.verify_api:
-        validate_live_config(errors)
 
-    if args.verify_api and not errors:
-        verified_messages = verify_api_credentials(errors)
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--runtime-config",
+        action="store_true",
+        help="Check local CLI executables and selected image backend configuration without AI generation.",
+    )
+    parser.add_argument(
+        "--verify-login",
+        action="store_true",
+        help="Make tiny Claude/Codex subscription calls to verify login. Uses plan allowance, not text API keys.",
+    )
+    parser.add_argument(
+        "--verify-image",
+        action="store_true",
+        help="Check the selected image backend without generating an image.",
+    )
+    args = parser.parse_args()
+
+    errors: list[str] = []
+    messages: list[str] = []
+    validate_structure(errors)
+
+    if args.runtime_config or args.verify_login or args.verify_image:
+        validate_runtime_config(errors, messages)
+    if args.verify_login and not errors:
+        verify_logins(errors, messages)
+    if args.verify_image and not errors:
+        try:
+            info = check_image_backend()
+            messages.append("Image backend connection: OK " + json.dumps(info, ensure_ascii=False))
+        except Exception as exc:
+            errors.append(f"Image backend check failed: {type(exc).__name__}: {exc}")
 
     if errors:
         print("SYSTEM VALIDATION: FAIL")
@@ -252,17 +306,17 @@ def main() -> None:
 
     print("SYSTEM VALIDATION: PASS")
     print(f"Agents: {len(REQUIRED_AGENTS)} Claude specialists")
-    print("Codex CCO: configured")
+    print("Codex CCO: ChatGPT-login CLI")
     print("Quality Gates: 4")
     print("Revision limit: 3")
     print("Target max cost: 400 JPY/final image")
-    print("Runtime pipeline: configured")
-    if args.live_config or args.verify_api:
-        print("Live configuration: PASS")
-    for message in verified_messages:
+    print("Text API keys required: NO")
+    for message in messages:
         print(message)
-    if args.verify_api:
-        print("API credential/model verification: PASS (no text/image generation was performed)")
+    if args.verify_login:
+        print("Subscription login verification: PASS")
+    if args.verify_image:
+        print("Image backend verification: PASS (no image was generated)")
 
 
 if __name__ == "__main__":
