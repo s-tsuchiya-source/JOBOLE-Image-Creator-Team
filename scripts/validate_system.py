@@ -117,6 +117,7 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
     required_python_utilities = [
         "scripts/create_project_from_intake.py",
         "scripts/input_loader.py",
+        "scripts/generate_creative.py",
         "services/image_generator.py",
         "services/overlay_renderer.py",
     ]
@@ -125,6 +126,8 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
             errors.append(f"Missing Phase 1 utility: {relative}")
 
     messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + Python file/image utilities")
+    messages.append("Minimum intake: job file required; hearing/text optional")
+    messages.append("Final text: deterministic Python overlay + companion copy.md")
 
 
 def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
