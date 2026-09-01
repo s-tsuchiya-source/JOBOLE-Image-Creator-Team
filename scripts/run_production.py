@@ -21,6 +21,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from input_loader import normalize_project_inputs
 from load_project import load_environment, load_yaml, resolve_project_dir
 from services.agent_runner import load_agent_config
+from services.contact_sheet import build_contact_sheet
 from services.creative_pipeline import produce_creatives
 from services.manifest import apply_creative_plan, ensure_current_schema, load_rows
 from services.pipeline_stages import (
@@ -121,7 +122,12 @@ def build_original_request(project: dict, intake: dict) -> dict:
     }
 
 
-def write_production_summary(project_dir: Path, project: dict, tracker: UsageTracker) -> None:
+def write_production_summary(
+    project_dir: Path,
+    project: dict,
+    tracker: UsageTracker,
+    contact_sheet: Path | None = None,
+) -> None:
     rows = load_rows(project_dir / "creative-manifest.csv")
     statuses: dict[str, int] = {}
     for row in rows:
@@ -135,6 +141,7 @@ def write_production_summary(project_dir: Path, project: dict, tracker: UsageTra
         "creative_statuses": statuses,
         "estimated_total_cost_yen": tracker.total_estimated_cost_yen(),
         "delivery_dir": str(project_dir / "05_delivery"),
+        "contact_sheet": str(contact_sheet) if contact_sheet else None,
         "completed_at": datetime.now().isoformat(timespec="seconds"),
     }
     save_json(project_dir / "04_project_review" / "production-summary.json", summary)
@@ -215,11 +222,14 @@ def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
         project["human_approval_status"] = "pending"
         project["estimated_total_cost_yen"] = tracker.total_estimated_cost_yen()
         save_project_yaml(project_dir / "project.yaml", project)
-        write_production_summary(project_dir, project, tracker)
+        contact_sheet = build_contact_sheet(project_dir)
+        write_production_summary(project_dir, project, tracker, contact_sheet)
 
         print("Production completed successfully.")
         print(f"Project: {project.get('project_id')}")
         print(f"Delivery candidates: {project_dir / '05_delivery'}")
+        if contact_sheet:
+            print(f"Contact sheet: {contact_sheet}")
         print("Human final approval: pending")
 
     except PipelineStop as exc:
