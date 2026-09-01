@@ -125,9 +125,26 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         if not (REPO_ROOT / relative).exists():
             errors.append(f"Missing Phase 1 utility: {relative}")
 
+    create_project_text = (REPO_ROOT / "scripts" / "create_project_from_intake.py").read_text(encoding="utf-8")
+    generate_text = (REPO_ROOT / "scripts" / "generate_creative.py").read_text(encoding="utf-8")
+    overlay_text = (REPO_ROOT / "services" / "overlay_renderer.py").read_text(encoding="utf-8")
+
+    if "PROJECT_DIR=" not in create_project_text:
+        errors.append("Project intake must print PROJECT_DIR for Codex CCO")
+    if '"--project-id"' not in generate_text or "required=True" not in generate_text:
+        errors.append("Creative generation must require --project-id")
+    if 'project_dir / "05_delivery"' not in generate_text:
+        errors.append("Creative generation must save final output inside 05_delivery")
+    if 'project_dir / "03_batches"' not in generate_text:
+        errors.append("Creative generation must save generation artifacts inside 03_batches")
+    if "modern_recruit" not in overlay_text:
+        errors.append("Recruitment typography renderer must provide modern_recruit style")
+
     messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + Python file/image utilities")
     messages.append("Minimum intake: job file required; hearing/text optional")
-    messages.append("Final text: deterministic Python overlay + companion copy.md")
+    messages.append("Project-scoped generation: REQUIRED before any final image")
+    messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
+    messages.append("Typography: modern_recruit hierarchy + deterministic Japanese overlay")
 
 
 def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
