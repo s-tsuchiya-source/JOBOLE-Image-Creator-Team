@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 import csv
 import json
 import os
@@ -50,11 +50,38 @@ def resolve_project_dir(projects_root: Path, project_key: str) -> Path:
     return matches[0]
 
 
+def normalize_for_json(value):
+    """Convert YAML-native values such as dates into JSON-safe values."""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: normalize_for_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [normalize_for_json(item) for item in value]
+    return value
+
+
 def load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, UnicodeError) as exc:
+        raise SystemExit(
+            "project.yaml を読み込めません。YAML内に不正な文字または形式があります。\n"
+            f"対象: {path}\n"
+            "テスト案件の場合は案件フォルダを削除して new_project.py で再作成してください。\n"
+            f"詳細: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise SystemExit(f"project.yaml のルートはオブジェクト形式である必要があります: {path}")
+
+    return normalize_for_json(data)
 
 
 def load_manifest(path: Path) -> list[dict]:
