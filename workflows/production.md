@@ -1,49 +1,61 @@
 # Production Workflow
 
 ## 目的
-VSCode Codexを入口に、Codex CCO・Claude Code専門Agent・画像生成バックエンドを標準化された順序で実行する。
+Phase 1では、VSCode Codexを最高責任者として、3人のClaude専門家と画像/ファイル処理だけを使い、最短で高品質画像を作る。
 
-## 認証
-- Codex: ChatGPTログイン済みCodex IDE/CLI
-- Claude: Claudeサブスクリプションへログイン済みClaude Code CLI
-- テキストAI用APIキー: 使用しない
-- 画像: `IMAGE_BACKEND=local_webui` または `openai`
+## 役割
+- Codex CCO: 最高責任者・統括・承認・差し戻し・Final QA
+- Recruitment Analyst: 求人事実整理
+- Creative Director: 戦略・コピー・Art Direction・Prompt
+- Creative Reviewer: 独立レビュー
+- Python: 画像生成・文字入れ・サイズ調整・保存・ファイル整理
 
-## 流れ
-1. Codex Intake が入力素材をGoogle Drive案件へ配置
-2. Claude Recruitment Analyst が求人事実抽出
-3. Codex Fact Gate
-4. Claude Production Director がStrategy候補を作成
-5. Codex Strategy Gate
-6. Claude Copy Director がCopy候補を作成
-7. Claude Art Director がArt候補を作成
-8. Claude Prompt Designer が画像生成仕様を作成
-9. Codex Direction Gate
-10. 選択中の画像バックエンドで生成
-11. 日本語重要テキストを正確に後載せ
-12. Claude Creative Reviewer
-13. Codex Final Traceability Gate
-14. 必要なら原因Agentまで差し戻し、最大3回再制作
-15. PASS画像を `05_delivery/` へ保存
-16. コンタクトシートを生成
-17. Human Final Approval
+## 標準フロー
+1. HumanがVSCode Codexへ求人原稿・ヒアリング・参考画像・補足テキストを渡す。
+2. Codexが必要なら案件フォルダを作り、入力を整理する。
+3. CodexがClaude Recruitment Analystへ求人分析を依頼する。
+4. Codexが元求人とFact Sheetを照合し、Fact Checkを行う。
+5. CodexがClaude Creative Directorへ承認済み事実とOriginal Requestを渡す。
+6. Creative DirectorがTarget / Key Message / Copy / Art / Prompt / Overlayを一体設計する。
+7. CodexがDirection Approvalを行う。
+8. CodexがPython画像ユーティリティを使って画像生成・文字入れ・サイズ調整・保存を行う。
+9. CodexがClaude Creative Reviewerへ完成画像レビューを依頼する。
+10. CodexがReviewer結果と完成画像を見てFinal QAする。
+11. NGなら原因工程だけへ戻す。原則最大3回。
+12. PASS後、人間が最終承認する。
 
-## 画像バックエンド
+## Claudeの呼び出し
+PythonからClaudeを自動オーケストレーションしない。
 
-### 初回テスト
-```env
-IMAGE_BACKEND=local_webui
+VSCode CodexがClaude Code CLIを直接利用する。
+
+役割定義:
+```text
+.claude/agents/recruitment-analyst.md
+.claude/agents/creative-director.md
+.claude/agents/creative-reviewer.md
 ```
-AUTOMATIC1111 / SD-WebUI-Forge互換ローカルAI。増分画像API費0円。
 
-### 本番
-```env
-IMAGE_BACKEND=openai
-```
-OpenAI Image API。テキスト工程は引き続きCLIログインを使う。
+## 画像生成
+画像生成方式は制作組織から独立させる。
+
+Codexが承認済みPromptをPython画像ユーティリティへ渡す。
+
+ローカル画像AIが不安定な場合、Phase 1のクリエイティブ品質検証を止めず、必要ならOpenAI Image APIへ切り替える。
+
+## Phase 1で使用しないもの
+- Production Director
+- Copy Director
+- Art Director
+- Prompt Designer
+- Python AI Orchestrator
+- 4段階の細分化Quality Gate
+- Schema中心のAI連携
+- 100枚量産前提の自動状態管理
 
 ## 禁止
-- Quality Gate省略
+- Codex CCOの二重化
 - 求人事実の推測補完
-- Claude/Codexテキスト工程でAPIキーを使う
-- 原因を特定せず同じ生成を繰り返す
+- CreatorとReviewerの兼任
+- Reviewerの点数だけでFinal PASS
+- ローカル画像AIの技術対応を、本来の画像品質検証より優先すること
