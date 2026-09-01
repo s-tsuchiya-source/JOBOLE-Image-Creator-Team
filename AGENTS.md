@@ -47,11 +47,13 @@ Production Director
 ↓
 Codex Strategy Gate
 ↓
-Copy Director + Art Director
+Copy Director
 ↓
-Codex Direction Gate
+Art Director
 ↓
 Prompt Designer
+↓
+Codex Direction Gate
 ↓
 Image Generation
 ↓
@@ -62,6 +64,8 @@ Codex Final Traceability Gate
 PASS / Revision / Human Review
 ```
 
+Direction GateではCopy・Art・Promptの3成果物をまとめて検証し、Prompt Designerが承認済み方針を変更していないことまで確認する。
+
 ## 案件作業開始
 対象案件が `PJ-0001` の場合、開発・検証中は以下を使う。
 
@@ -69,7 +73,7 @@ PASS / Revision / Human Review
 python scripts/run_production.py PJ-0001 --dry-run
 ```
 
-live実行時は `.env` で `PRODUCTION_MODE=live` と必要なAPI設定を行う。
+live実行時は `.env` で `PRODUCTION_MODE=live` と必要なAPI・モデル・料金設定を行う。
 
 ```bash
 python scripts/run_production.py PJ-0001
@@ -98,5 +102,7 @@ python scripts/run_production.py PJ-0001
 - Original Requestから最終画像まで追跡可能にする
 - 重大事実エラーは点数に関係なくREJECT
 - 自動修正上限は原則3回
+- 330円到達後は未承認Creativeの次の有料自動修正を開始しない
+- 400円/最終画像をハード上限とする
 - 最高品質モードでは候補生成→比較→選抜を行う
 - 人間は最終承認者として残す
