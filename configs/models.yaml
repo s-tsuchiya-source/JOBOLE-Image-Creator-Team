@@ -1,0 +1,18 @@
+models:
+  codex_cco:
+    provider: openai
+    model_env: OPENAI_CCO_MODEL
+    purpose: quality_gate_and_orchestration
+  claude_default:
+    provider: anthropic
+    model_env: ANTHROPIC_MODEL
+    purpose: specialist_agents
+  image_generation:
+    provider: openai
+    model_env: OPENAI_IMAGE_MODEL
+    purpose: image_generation
+
+runtime:
+  use_environment_model_names: true
+  hardcode_model_names: false
+  dry_run_when_provider_unavailable: true
