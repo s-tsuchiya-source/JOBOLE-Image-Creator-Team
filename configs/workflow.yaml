@@ -1,14 +1,57 @@
 workflow:
+  mode: quality_first
   steps:
-    - new_order
-    - production_direction
-    - text_direction
-    - image_direction
+    - intake
+    - recruitment_analysis
+    - codex_fact_gate
+    - production_strategy
+    - codex_strategy_gate
+    - copy_direction
+    - art_direction
+    - codex_direction_gate
     - prompt_design
     - image_generation
-    - review
+    - creative_review
+    - codex_final_traceability_gate
     - revision_if_needed
-    - final_approval
-  quality_gate:
-    pass_score: 85
-    revision_score_min: 70
+    - human_final_approval
+    - delivery
+
+  statuses:
+    - awaiting_input
+    - input_ready
+    - analyzing
+    - planning
+    - directing
+    - generating
+    - review
+    - revision
+    - needs_clarification
+    - needs_human_review
+    - completed
+    - delivered
+    - blocked
+
+  gates:
+    fact_gate:
+      owner: codex_cco
+      after: recruitment_analysis
+    strategy_gate:
+      owner: codex_cco
+      after: production_strategy
+    direction_gate:
+      owner: codex_cco
+      after:
+        - copy_direction
+        - art_direction
+    final_traceability_gate:
+      owner: codex_cco
+      after: creative_review
+
+  revision:
+    max_count: 3
+    return_to_root_cause_agent: true
+    escalate_after_limit: true
+
+  delivery:
+    human_approval_required: true
