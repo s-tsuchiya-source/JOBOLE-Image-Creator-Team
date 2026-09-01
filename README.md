@@ -1,156 +1,212 @@
 # JOBOLE Image Creator Team
 
-JOBOLE向けの画像制作を、Claude・Codex・画像生成AIを組み合わせて効率化・標準化するためのAI制作チーム用リポジトリです。
+JOBOLE向け画像制作を、**Codex Chief Creative Officer + Claude Code専門Agent + 切替可能な画像生成AI**で標準化するAI制作チームです。
 
-## 目的
+## 最終ユーザー体験
 
-このリポジトリでは、画像制作に必要な以下の仕組みを管理します。
-
-- AIエージェントの役割定義
-- 制作ワークフロー
-- 品質チェックルール
-- 各種テンプレート
-- Google Drive上の案件フォルダを扱うスクリプト
-- Claude / Codex が参照する共通ルール
-
-実際の案件データや生成画像は、原則としてGitHubには保存せず、Google Drive側で管理します。
-
-## 基本設計
-
-```text
-GitHub
-├─ AIエージェント定義
-├─ 制作ルール
-├─ Workflow
-├─ Template
-├─ Config
-└─ Script
-
-Google Drive
-└─ projects/
-   ├─ PJ-0001/
-   ├─ PJ-0002/
-   └─ ...
-```
-
-GitHubは「AI制作チームそのもの」を管理し、Google Driveは「各案件の制作データ」を管理する役割分担です。
-
-## 想定する制作フロー
+人間はVSCodeのCodexへ、求人原稿・ヒアリング・参考画像・必要に応じた補足テキストを送ります。
 
 ```text
 Human
   ↓
-受注・ヒアリング
+VSCode Codexへ素材を送る
   ↓
-Production Director
+Codexが案件作成・Drive格納・制作開始
   ↓
-Text Director
+Claude Code専門Agent群
   ↓
-Image Director
-  ↓
-Designer
+Codex 4段階Quality Gate
   ↓
 画像生成AI
   ↓
-Reviewer
+Claude Reviewer
   ↓
-NG → 修正・再生成
+Codex Final QA
   ↓
-PASS
+Google Drive / 05_delivery
   ↓
-Human 最終確認
-  ↓
-納品
+Human 最終承認
 ```
 
-## 想定ディレクトリ
+人間がPythonコマンド・APIキー・案件フォルダを操作することを通常運用にしません。
+
+## 認証・費用設計
+
+### テキストAI
+- Codex CCO → Codex IDE/CLIへChatGPTアカウントでログイン
+- Claude専門Agent → Claude CodeへClaudeサブスクリプションでログイン
+- **テキストAI用APIキーは不要**
+- Codex/Claudeの契約利用枠は消費するが、テキストAPIの従量課金は発生させない設計
+
+### 画像生成
+`.env` の `IMAGE_BACKEND` だけで切り替えます。
+
+```env
+IMAGE_BACKEND=local_webui
+```
+
+初回・開発テスト。AUTOMATIC1111 / SD-WebUI-Forge互換のローカル画像AIを使用し、画像APIの増分費用は0円。
+
+```env
+IMAGE_BACKEND=openai
+```
+
+本番最高品質でOpenAI Image APIを使う場合。OpenAI APIキーはこの画像工程だけに使用します。
+
+## AI組織
 
 ```text
-JOBOLE-Image-Creator-Team/
+Codex Chief Creative Officer
 │
-├─ README.md
-├─ CLAUDE.md
-├─ AGENTS.md
-├─ .gitignore
-├─ .env.example
-│
-├─ .claude/
-│   └─ agents/
-│       ├─ production-director.md
-│       ├─ text-director.md
-│       ├─ image-director.md
-│       ├─ designer.md
-│       └─ reviewer.md
-│
-├─ workflows/
-│   ├─ new-order.md
-│   ├─ production.md
-│   ├─ review.md
-│   └─ revision.md
-│
-├─ rules/
-│   ├─ quality.md
-│   ├─ naming.md
-│   └─ production.md
-│
-├─ templates/
-│   ├─ project.yaml
-│   ├─ creative.yaml
-│   ├─ creative-manifest.csv
-│   └─ review.md
-│
-├─ configs/
-│   ├─ storage.yaml
-│   ├─ workflow.yaml
-│   └─ agents.yaml
-│
-├─ scripts/
-│   ├─ new_project.py
-│   └─ project_manager.py
-│
+├─ Claude Recruitment Analyst
+├─ Claude Production Director
+├─ Claude Copy Director
+├─ Claude Art Director
+├─ Claude Prompt Designer
+└─ Claude Creative Reviewer
+```
+
+Codexは制作内容を無条件で作り直すのではなく、各専門Agentの成果物を承認・差し戻し・統合する最高責任者です。
+
+## 4段階Quality Gate
+
+```text
+Recruitment Analyst
+↓
+Codex Fact Gate
+↓
+Production Director
+↓
+Codex Strategy Gate
+↓
+Copy + Art + Prompt
+↓
+Codex Direction Gate
+↓
+Image Generation
+↓
+Claude Creative Reviewer
+↓
+Codex Final Traceability Gate
+```
+
+## 品質モード
+- Strategy候補: 5案以上
+- Copy候補: 3案以上
+- Art候補: 2案以上
+- 自動修正: 原則最大3回
+- 重大な求人事実エラー: 点数に関係なくREJECT
+- Original Request → 最終画像までTraceabilityを維持
+
+## コスト設計
+- Claude Code / Codex CLIテキスト工程: 増分APIコスト0円として記録
+- local_webui画像: 増分画像APIコスト0円
+- OpenAI画像API: 400円/最終画像をハード上限
+- OpenAI画像API時、未承認Creativeが推定330円以上なら次の有料再生成を開始しない
+
+## データ配置
+
+```text
+GitHub
+├─ AI Agent定義
+├─ Codex CCO定義
+├─ Schema
+├─ Quality Rule
+├─ Workflow
+├─ Script
+└─ Provider実装
+
+Google Drive
 └─ projects/
-    └─ README.md
+   ├─ PJ-0001_.../
+   ├─ PJ-0002_.../
+   └─ ...
 ```
 
-## 案件データの保存方針
+GitHubには実案件データ・顧客素材・生成画像を保存しません。
 
-案件ごとの実データはGoogle Driveに保存します。
-
-想定例：
+## Google Drive案件構造
 
 ```text
-Google Drive/
-└─ JOBOLE-Image-Creator-Team/
-    └─ projects/
-        ├─ PJ-0001/
-        ├─ PJ-0002/
-        └─ PJ-0003/
+PJ-0001_client/
+├─ project.yaml
+├─ creative-manifest.csv
+├─ 00_request/
+│  ├─ inbox/
+│  │  ├─ job_posting/
+│  │  ├─ hearing/
+│  │  └─ references/
+│  └─ normalized/
+├─ 01_strategy/
+├─ 02_direction/
+├─ 03_batches/
+├─ 04_project_review/
+└─ 05_delivery/
 ```
 
-将来的には `.env` または `configs/storage.yaml` にGoogle Drive上の保存先を設定し、案件作成スクリプトから自動生成できるようにします。
+## セットアップ確認
 
-## 今後の構築予定
+```powershell
+python -m pip install -r requirements.txt
+python -m compileall scripts services
+python scripts/validate_system.py
+```
 
-1. GitHubリポジトリ初期化
-2. AIエージェント定義作成
-3. 制作Workflow作成
-4. 品質・命名ルール作成
-5. 各種テンプレート作成
-6. Google Drive保存先設定
-7. 新規案件自動生成スクリプト作成
-8. Claude / Codex連携
-9. 画像生成AI連携
-10. レビュー・修正ループの自動化
+Claude/Codex CLIと画像設定:
+
+```powershell
+python scripts/validate_system.py --runtime-config
+```
+
+ログイン確認:
+
+```powershell
+python scripts/validate_system.py --verify-login
+```
+
+ローカル画像AI接続確認:
+
+```powershell
+python scripts/check_local_image.py
+```
+
+## 手動dry-run
+
+```powershell
+python scripts/run_production.py PJ-0001 --dry-run
+```
+
+本実行:
+
+```powershell
+python scripts/run_production.py PJ-0001
+```
+
+通常の利用者はこれらを直接操作せず、VSCodeのCodexが `AGENTS.md` に従って内部実行します。
+
+## Codexからの自動受付
+
+Codexは `scripts/create_project_from_intake.py` を使用します。
+
+```powershell
+python scripts/create_project_from_intake.py `
+  --project-name "案件名" `
+  --quantity 1 `
+  --job-posting "C:\path\求人原稿.xlsx" `
+  --hearing "C:\path\ヒアリング.docx" `
+  --reference "C:\path\参考画像.png"
+```
+
+補足テキストも追加できます。
+
+## 詳細手順
+
+`docs/live-setup.md` を参照してください。
 
 ## 開発方針
-
-- `main` は安定版として使用する
-- 変更は原則feature branchで行う
-- Pull Requestで内容を確認してからmainへ反映する
-- APIキーや認証情報はGitHubへ直接コミットしない
+- `main` は安定版
+- 変更はfeature branch + Pull Request
+- APIキーや認証情報はGitHubへコミットしない
 - 案件画像や顧客データはGitHubへ保存しない
-- AIの判断ルールは可能な限りMarkdownまたは設定ファイルとして明示する
-
-## Status
-
-初期構築中。
+- AI判断ルールはMarkdown/Schema/Configで検証可能にする
+- 人間の最終承認前に外部納品しない
