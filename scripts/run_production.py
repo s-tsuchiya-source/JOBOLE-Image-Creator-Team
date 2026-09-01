@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 
 import yaml
@@ -23,6 +24,7 @@ from load_project import load_environment, load_yaml, resolve_project_dir
 from services.agent_runner import load_agent_config
 from services.contact_sheet import build_contact_sheet
 from services.creative_pipeline import produce_creatives
+from services.image_generator import check_image_backend
 from services.manifest import apply_creative_plan, ensure_current_schema, load_rows
 from services.pipeline_stages import (
     PipelineStop,
@@ -87,24 +89,51 @@ def preflight(project_dir: Path, project: dict, intake: dict) -> dict:
     except Exception as exc:
         add("quality_gate_schema", False, str(exc))
 
-    add("codex_cco_role", (REPO_ROOT / ".codex" / "chief-creative-officer.md").exists(), ".codex/chief-creative-officer.md")
+    add(
+        "codex_cco_role",
+        (REPO_ROOT / ".codex" / "chief-creative-officer.md").exists(),
+        ".codex/chief-creative-officer.md",
+    )
     add("quality_config", QUALITY_CONFIG.exists(), str(QUALITY_CONFIG))
 
-    mode = os.getenv("PRODUCTION_MODE", "dry-run").lower()
+    mode = os.getenv("PRODUCTION_MODE", "dry-run").strip().lower()
     if mode == "live":
-        live_settings = {
-            "ANTHROPIC_API_KEY": bool(os.getenv("ANTHROPIC_API_KEY")),
-            "ANTHROPIC_MODEL": bool(os.getenv("ANTHROPIC_MODEL")),
-            "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
-            "OPENAI_CCO_MODEL": bool(os.getenv("OPENAI_CCO_MODEL")),
-            "OPENAI_IMAGE_MODEL": bool(os.getenv("OPENAI_IMAGE_MODEL")),
-        }
-        for name, configured in live_settings.items():
-            detail = "configured" if ("KEY" in name and configured) else (os.getenv(name) or "missing")
-            add(name.lower(), configured, detail)
+        claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
+        codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
+        claude_path = shutil.which(claude_command)
+        codex_path = shutil.which(codex_command)
+        add("claude_code_cli", bool(claude_path), claude_path or f"missing: {claude_command}")
+        add("codex_cli", bool(codex_path), codex_path or f"missing: {codex_command}")
+
+        backend = os.getenv("IMAGE_BACKEND", "local_webui").strip().lower()
+        if backend in {"local", "local_webui", "webui", "forge", "automatic1111"}:
+            try:
+                info = check_image_backend()
+                add("image_backend", bool(info.get("ok")), json.dumps(info, ensure_ascii=False))
+            except Exception as exc:
+                add("image_backend", False, f"local WebUI unavailable: {exc}")
+        elif backend in {"openai", "openai_api"}:
+            required = {
+                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+                "OPENAI_IMAGE_MODEL": os.getenv("OPENAI_IMAGE_MODEL"),
+                "USDJPY_RATE": os.getenv("USDJPY_RATE"),
+                "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION": os.getenv(
+                    "OPENAI_IMAGE_ESTIMATED_USD_PER_GENERATION"
+                ),
+            }
+            for name, value in required.items():
+                add(
+                    f"image_setting:{name.lower()}",
+                    bool((value or "").strip()),
+                    "configured" if (value or "").strip() else "missing",
+                )
+        else:
+            add("image_backend", False, f"unsupported IMAGE_BACKEND={backend!r}")
 
     return {
         "mode": mode,
+        "text_ai": "claude_code_subscription + codex_chatgpt_login",
+        "image_backend": os.getenv("IMAGE_BACKEND", "local_webui"),
         "ready": all(check["passed"] for check in checks),
         "checks": checks,
     }
@@ -139,7 +168,9 @@ def write_production_summary(
         "human_approval_status": project.get("human_approval_status"),
         "creative_count": len(rows),
         "creative_statuses": statuses,
-        "estimated_total_cost_yen": tracker.total_estimated_cost_yen(),
+        "estimated_incremental_api_cost_yen": tracker.total_estimated_cost_yen(),
+        "text_ai_billing": "subscription_login",
+        "image_backend": os.getenv("IMAGE_BACKEND", "local_webui"),
         "delivery_dir": str(project_dir / "05_delivery"),
         "contact_sheet": str(contact_sheet) if contact_sheet else None,
         "completed_at": datetime.now().isoformat(timespec="seconds"),
@@ -220,13 +251,17 @@ def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
 
         set_project_status(project_dir, project, "completed")
         project["human_approval_status"] = "pending"
-        project["estimated_total_cost_yen"] = tracker.total_estimated_cost_yen()
+        project["estimated_incremental_api_cost_yen"] = tracker.total_estimated_cost_yen()
+        project["text_ai_billing"] = "subscription_login"
+        project["image_backend"] = os.getenv("IMAGE_BACKEND", "local_webui")
         save_project_yaml(project_dir / "project.yaml", project)
         contact_sheet = build_contact_sheet(project_dir)
         write_production_summary(project_dir, project, tracker, contact_sheet)
 
         print("Production completed successfully.")
         print(f"Project: {project.get('project_id')}")
+        print(f"Image backend: {os.getenv('IMAGE_BACKEND', 'local_webui')}")
+        print(f"Incremental API cost estimate: {tracker.total_estimated_cost_yen()} JPY")
         print(f"Delivery candidates: {project_dir / '05_delivery'}")
         if contact_sheet:
             print(f"Contact sheet: {contact_sheet}")
@@ -248,10 +283,16 @@ def execute_live(project_dir: Path, project: dict, intake: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the Codex CCO + Claude specialist quality-first production pipeline."
+        description=(
+            "Run Codex CCO (ChatGPT login) + Claude Code specialists + selected image backend."
+        )
     )
     parser.add_argument("project_id", help="PJ-0001 or project folder prefix")
-    parser.add_argument("--dry-run", action="store_true", help="Validate system without AI/image API calls")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate project and AI-team structure without running AI/image generation.",
+    )
     args = parser.parse_args()
 
     projects_root = load_environment()
@@ -275,7 +316,7 @@ def main() -> None:
         print(f"Report: {report_path}")
         if not report["ready"]:
             raise SystemExit(2)
-        print("dry-run completed. No AI or image API calls were made.")
+        print("dry-run completed. No Claude/Codex/image generation was executed.")
         return
 
     if not report["ready"]:
