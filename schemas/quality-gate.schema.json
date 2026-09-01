@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QualityGateDecision",
+  "type": "object",
+  "required": ["gate", "decision", "score", "checks", "issues", "next_action"],
+  "properties": {
+    "gate": {"enum": ["fact_gate", "strategy_gate", "direction_gate", "final_traceability_gate"]},
+    "decision": {"enum": ["pass", "revise", "needs_clarification", "needs_human_review", "blocked"]},
+    "score": {"type": "number", "minimum": 0, "maximum": 100},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "passed", "reason"],
+        "properties": {
+          "name": {"type": "string"},
+          "passed": {"type": "boolean"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "severity", "description", "return_to"],
+        "properties": {
+          "code": {"enum": ["fact_error", "strategy_error", "copy_error", "art_error", "prompt_error", "generation_error", "review_error", "format_error", "brand_error", "missing_information"]},
+          "severity": {"enum": ["low", "medium", "high", "critical"]},
+          "description": {"type": "string"},
+          "return_to": {"type": "string"},
+          "evidence": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "next_action": {"type": "string"}
+  },
+  "additionalProperties": false
+}
