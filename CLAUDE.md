@@ -44,10 +44,10 @@ PASSのみ次工程
 ```
 
 Gateは以下の4段階。
-- Fact Gate
-- Strategy Gate
-- Direction Gate
-- Final Traceability Gate
+- Fact Gate: Recruitment Analysisを検証
+- Strategy Gate: Production Planを検証
+- Direction Gate: Copy + Art + Promptをまとめて検証
+- Final Traceability Gate: 完成画像まで含めて検証
 
 ## 案件開始
 開発・検証時の標準入口は `scripts/run_production.py`。
@@ -62,7 +62,7 @@ live実行時:
 python scripts/run_production.py PJ-0001
 ```
 
-`PRODUCTION_MODE=live` とAPI設定が必要。
+`PRODUCTION_MODE=live` とAPI・モデル・料金設定が必要。
 
 ## 入力
 最低限必要なのは求人原稿。ヒアリング資料・参考画像・補足テキストは任意。
@@ -83,8 +83,8 @@ python scripts/run_production.py PJ-0001
 5. Codex Strategy Gate
 6. Copy Director
 7. Art Director
-8. Codex Direction Gate
-9. Prompt Designer
+8. Prompt Designer
+9. Codex Direction Gate
 10. Image Generation
 11. Creative Reviewer
 12. Codex Final Traceability Gate
@@ -92,12 +92,19 @@ python scripts/run_production.py PJ-0001
 14. Human Final Approval
 15. Delivery
 
+Prompt Designerの成果物もDirection Gateの対象であり、承認済みCopy/ArtをPromptが勝手に変更していないことを生成前に検証する。
+
 ## コンペ原則
 最高品質モードでは最初の案をそのまま採用しない。
-- Strategy: 複数訴求候補を比較
-- Copy: 複数コピー候補を比較
-- Art: 複数方向候補を比較
+- Strategy: 5候補以上を原則とする
+- Copy: 3候補以上を原則とする
+- Art: 2候補以上を原則とする
 - Codexが比較・承認したものだけ次へ進む
+
+## コスト原則
+- 400円/最終画像をハード上限とする。
+- 未承認Creativeが推定330円以上に達した場合、新しい有料自動修正を開始しない。
+- live実行時は料金設定が揃っていない状態で制作を開始しない。
 
 ## 参照優先度
 1. 自分の `.claude/agents/<role>.md`
