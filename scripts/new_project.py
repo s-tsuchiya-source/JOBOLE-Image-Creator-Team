@@ -75,6 +75,24 @@ def write_project_yaml(path, project_data):
         )
 
 
+def ensure_project_structure(project_dir):
+    """Create the stable Google Drive folder contract for every project."""
+    subdirs = [
+        "00_request/inbox/job_posting",
+        "00_request/inbox/hearing",
+        "00_request/inbox/references",
+        "00_request/normalized",
+        "01_strategy",
+        "02_direction/text",
+        "02_direction/image",
+        "03_batches",
+        "04_project_review",
+        "05_delivery",
+    ]
+    for subdir in subdirs:
+        (project_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+
 def main():
     projects_root_value = os.getenv("PROJECTS_ROOT")
     if not projects_root_value:
@@ -94,16 +112,7 @@ def main():
     project_id = next_project_id(projects_root)
     slug = sanitize_name(client_name or project_name or "project") or "project"
     project_dir = projects_root / f"{project_id}_{slug}"
-
-    for subdir in [
-        "00_request",
-        "01_strategy",
-        "02_direction",
-        "03_batches",
-        "04_project_review",
-        "05_delivery",
-    ]:
-        (project_dir / subdir).mkdir(parents=True, exist_ok=True)
+    ensure_project_structure(project_dir)
 
     project_data = {
         "project_id": project_id,
@@ -113,13 +122,17 @@ def main():
         "deadline": deadline,
         "quantity": quantity,
         "created_at": date.today().isoformat(),
-        "status": "planning",
+        "status": "awaiting_input",
+        "input_status": "not_checked",
     }
 
     write_project_yaml(project_dir / "project.yaml", project_data)
     create_manifest(project_dir / "creative-manifest.csv", quantity)
 
     print(f"案件を作成しました: {project_dir}")
+    print("次に、求人原稿を 00_request/inbox/job_posting/ へ、")
+    print("ヒアリング資料を 00_request/inbox/hearing/ へ配置してください。")
+    print("参考画像・ロゴ等は 00_request/inbox/references/ へ配置できます。")
 
 
 if __name__ == "__main__":
