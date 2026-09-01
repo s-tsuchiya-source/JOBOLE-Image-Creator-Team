@@ -51,6 +51,17 @@ def check_copy_direction(copy_direction: dict[str, Any], *, copy_candidate_min: 
             )
 
 
+def check_art_direction(art_direction: dict[str, Any], *, art_candidate_min: int = 2) -> None:
+    candidates = art_direction.get("candidates") or []
+    if len(candidates) < art_candidate_min:
+        raise QualityCheckError(
+            f"Art competition requires at least {art_candidate_min} candidates; got {len(candidates)}"
+        )
+    ids = {item.get("art_id") for item in candidates}
+    if art_direction.get("selected_art") not in ids:
+        raise QualityCheckError("selected_art does not reference a candidate art_id.")
+
+
 def check_revision_budget(revision_count: int, max_revision_count: int) -> None:
     if revision_count > max_revision_count:
         raise QualityCheckError(
