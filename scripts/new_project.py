@@ -2,23 +2,49 @@ from pathlib import Path
 import csv
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 
 import yaml
 from dotenv import load_dotenv
 
 
-# Always load .env from the repository root, regardless of the current directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = REPO_ROOT / ".env"
 load_dotenv(ENV_PATH)
 
-# YAML 1.2 does not allow most C0 control characters.
 CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+MANIFEST_COLUMNS = [
+    "project_id",
+    "creative_group_id",
+    "creative_id",
+    "batch_id",
+    "theme",
+    "target",
+    "message",
+    "format",
+    "width",
+    "height",
+    "copy_status",
+    "art_status",
+    "prompt_status",
+    "generation_status",
+    "review_status",
+    "version",
+    "claude_score",
+    "codex_score",
+    "final_score",
+    "revision_count",
+    "prompt_path",
+    "image_path",
+    "review_path",
+    "cost_yen",
+    "status",
+    "updated_at",
+]
 
 
 def clean_input(value):
-    """Remove accidental control characters (for example Ctrl+V / 0x16)."""
     return CONTROL_CHARS_RE.sub("", value).strip()
 
 
@@ -43,12 +69,28 @@ def next_project_id(projects_root):
     return f"PJ-{max(ids, default=0) + 1:04d}"
 
 
-def create_manifest(path, quantity):
+def create_manifest(path, project_id, quantity):
+    now = datetime.now().isoformat(timespec="seconds")
     with path.open("w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
-        writer.writerow(["creative_id", "theme", "target", "format", "message", "status", "version", "score"])
+        writer = csv.DictWriter(f, fieldnames=MANIFEST_COLUMNS)
+        writer.writeheader()
         for i in range(1, quantity + 1):
-            writer.writerow([f"CR{i:03d}", "", "", "", "", "pending", 0, ""])
+            writer.writerow(
+                {
+                    "project_id": project_id,
+                    "creative_id": f"CR{i:03d}",
+                    "copy_status": "pending",
+                    "art_status": "pending",
+                    "prompt_status": "pending",
+                    "generation_status": "pending",
+                    "review_status": "pending",
+                    "version": 0,
+                    "revision_count": 0,
+                    "cost_yen": 0,
+                    "status": "pending",
+                    "updated_at": now,
+                }
+            )
 
 
 def read_quantity():
@@ -64,7 +106,6 @@ def read_quantity():
 
 
 def write_project_yaml(path, project_data):
-    """Write valid UTF-8 YAML and let PyYAML quote/escape values safely."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
         yaml.safe_dump(
             project_data,
@@ -76,17 +117,19 @@ def write_project_yaml(path, project_data):
 
 
 def ensure_project_structure(project_dir):
-    """Create the stable Google Drive folder contract for every project."""
     subdirs = [
         "00_request/inbox/job_posting",
         "00_request/inbox/hearing",
         "00_request/inbox/references",
         "00_request/normalized",
-        "01_strategy",
-        "02_direction/text",
-        "02_direction/image",
+        "01_strategy/recruitment",
+        "01_strategy/quality_gates",
+        "02_direction/copy",
+        "02_direction/art",
+        "02_direction/prompts",
         "03_batches",
-        "04_project_review",
+        "04_project_review/claude",
+        "04_project_review/codex",
         "05_delivery",
     ]
     for subdir in subdirs:
@@ -124,10 +167,12 @@ def main():
         "created_at": date.today().isoformat(),
         "status": "awaiting_input",
         "input_status": "not_checked",
+        "quality_mode": "quality_first",
+        "human_final_approval_required": True,
     }
 
     write_project_yaml(project_dir / "project.yaml", project_data)
-    create_manifest(project_dir / "creative-manifest.csv", quantity)
+    create_manifest(project_dir / "creative-manifest.csv", project_id, quantity)
 
     print(f"案件を作成しました: {project_dir}")
     print("次に、求人原稿を 00_request/inbox/job_posting/ へ、")
