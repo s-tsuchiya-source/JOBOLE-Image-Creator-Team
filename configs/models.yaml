@@ -1,18 +1,28 @@
 models:
   codex_cco:
-    provider: openai
-    model_env: OPENAI_CCO_MODEL
+    provider: codex_cli
+    auth: chatgpt_login
+    model_env: CODEX_CLI_MODEL
     purpose: quality_gate_and_orchestration
+    incremental_api_cost: 0
   claude_default:
-    provider: anthropic
-    model_env: ANTHROPIC_MODEL
+    provider: claude_code
+    auth: claude_subscription_login
+    model_env: CLAUDE_CLI_MODEL
     purpose: specialist_agents
+    incremental_api_cost: 0
   image_generation:
-    provider: openai
+    provider_env: IMAGE_BACKEND
+    local_provider: local_webui
+    production_provider: openai_image_api
     model_env: OPENAI_IMAGE_MODEL
     purpose: image_generation
 
 runtime:
-  use_environment_model_names: true
-  hardcode_model_names: false
+  text_api_keys_required: false
+  codex_requires_chatgpt_login: true
+  claude_requires_subscription_login: true
+  strip_openai_api_key_from_codex_child: true
+  strip_anthropic_api_key_from_claude_child: true
+  image_backend_default: local_webui
   dry_run_when_provider_unavailable: true
