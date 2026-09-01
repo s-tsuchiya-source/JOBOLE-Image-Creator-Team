@@ -1,0 +1,68 @@
+architecture:
+  version: phase1_final_v1
+  principle: "3 active Claude specialists + VSCode Codex CCO; tune expertise before adding agents"
+  tuning_guide: .claude/agents/README.md
+
+chief:
+  codex_cco:
+    file: .codex/chief-creative-officer.md
+    role: chief_creative_officer
+    runtime: vscode_codex
+    auth: chatgpt_login
+    responsibilities:
+      - project_scope_and_storage
+      - fact_gate
+      - candidate_selection
+      - creative_direction_approval
+      - revision_routing
+      - final_qa
+
+agents:
+  recruitment_analyst:
+    file: .claude/agents/recruitment-analyst.md
+    role: recruitment_fact_and_ad_leverage_analysis
+    runtime: claude_code
+    auth: subscription_login
+    expertise:
+      - facts
+      - evidence
+      - advertising_leverage
+      - claim_risk
+      - job_reality
+
+  creative_director:
+    file: .claude/agents/creative-director.md
+    role: integrated_creative_direction
+    runtime: claude_code
+    auth: subscription_login
+    expertise:
+      - strategy
+      - target_hypothesis
+      - appeal_competition
+      - copywriting
+      - art_direction
+      - typography
+      - image_prompt
+
+  creative_reviewer:
+    file: .claude/agents/creative-reviewer.md
+    role: independent_creative_quality_review
+    runtime: claude_code
+    auth: subscription_login
+    expertise:
+      - fact_claim_review
+      - advertising_impact
+      - copy_review
+      - job_reality_review
+      - typography_review
+      - generation_artifact_review
+      - root_cause_routing
+
+historical_specialist_files:
+  note: >-
+    Phase 1では直接実行しない。旧専門Agentの有用な知見はactive Creative Directorへ吸収する。
+    Agent数を戻す前にactive Agent定義をチューニングする。
+  production_director: .claude/agents/production-director.md
+  copy_director: .claude/agents/copy-director.md
+  art_director: .claude/agents/art-director.md
+  prompt_designer: .claude/agents/prompt-designer.md

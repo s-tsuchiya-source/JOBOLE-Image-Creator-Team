@@ -1,0 +1,2 @@
+project_id,creative_group_id,creative_id,batch_id,theme,target,message,format,width,height,copy_status,art_status,prompt_status,generation_status,review_status,version,claude_score,codex_score,final_score,revision_count,prompt_path,image_path,review_path,cost_yen,status,updated_at
+PJ-0001,CG001,CR001,B001,サポート訴求,代理店,商談同席の安心感,1200x628,1200,628,pending,pending,pending,pending,pending,0,,,,0,,,,0,pending,

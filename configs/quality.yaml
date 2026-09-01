@@ -1,0 +1,27 @@
+quality:
+  reviewer_pass_score: 90
+  codex_gate_pass_score: 90
+  final_gate_pass_score: 92
+  max_revision_count: 3
+  critical_issue_forces_revision: true
+  fact_error_forces_revision: true
+  require_traceability: true
+  require_schema_validation: true
+  competition:
+    strategy_candidate_min: 5
+    copy_candidate_min: 3
+    art_candidate_min: 2
+  budget:
+    metric: incremental_api_cost_yen
+    text_subscription_incremental_api_cost_yen: 0
+    local_image_incremental_api_cost_yen: 0
+    paid_image_backend: openai
+    target_max_yen_per_final_image: 400
+    warning_yen_per_final_image: 330
+    stop_and_escalate_yen_per_final_image: 400
+    do_not_start_another_revision_at_or_above_yen: 330
+  human_review:
+    always_required_before_external_delivery: true
+    escalate_on_revision_limit: true
+    escalate_on_budget_limit: true
+    escalate_on_unresolved_fact: true

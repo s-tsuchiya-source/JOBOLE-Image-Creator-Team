@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CopyDirection",
+  "type": "object",
+  "required": ["creative_group_id", "candidates", "selected_copy"],
+  "properties": {
+    "creative_group_id": {"type": "string"},
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["copy_id", "main_copy", "trace_to_facts"],
+        "properties": {
+          "copy_id": {"type": "string"},
+          "main_copy": {"type": "string"},
+          "sub_copy": {"type": ["string", "null"]},
+          "cta": {"type": ["string", "null"]},
+          "trace_to_facts": {"type": "array", "items": {"type": "string"}},
+          "risk_flags": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "selected_copy": {"type": "string"},
+    "selection_reason": {"type": "string"}
+  },
+  "additionalProperties": false
+}

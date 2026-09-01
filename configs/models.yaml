@@ -1,0 +1,30 @@
+models:
+  codex_cco:
+    provider: codex_cli
+    auth: chatgpt_login
+    model_env: CODEX_CLI_MODEL
+    purpose: quality_gate_and_orchestration
+    incremental_api_cost: 0
+  claude_default:
+    provider: claude_code
+    auth: claude_subscription_login
+    model_env: CLAUDE_CLI_MODEL
+    purpose: specialist_agents
+    incremental_api_cost: 0
+  image_generation:
+    provider_env: IMAGE_BACKEND
+    intel_local_provider: openvino_ovms
+    webui_local_provider: local_webui
+    production_provider: openai_image_api
+    openvino_model_env: OPENVINO_IMAGE_MODEL
+    openai_model_env: OPENAI_IMAGE_MODEL
+    purpose: image_generation
+
+runtime:
+  text_api_keys_required: false
+  codex_requires_chatgpt_login: true
+  claude_requires_subscription_login: true
+  strip_openai_api_key_from_codex_child: true
+  strip_anthropic_api_key_from_claude_child: true
+  image_backend_default: openvino_ovms
+  dry_run_when_provider_unavailable: true

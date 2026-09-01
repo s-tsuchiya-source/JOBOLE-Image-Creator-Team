@@ -1,0 +1,100 @@
+workflow:
+  mode: phase1_quality_validation
+
+  goal: >-
+    VSCode Codexを最高責任者として、求人ファイル1つからでも少数の高品質広告画像を作り、
+    人間が品質評価できる状態まで最短で到達する。
+
+  intake:
+    required:
+      - job_file
+    optional:
+      - hearing_sheet
+      - supplementary_text
+    do_not_require:
+      - reference_image
+      - manifest
+      - project_id
+      - settings_json
+      - manual_python_commands
+    defaults_when_unspecified:
+      quantity: 1
+      width: 1200
+      height: 628
+      objective: 求人広告画像制作
+    job_only_generation_allowed: true
+    hearing_missing_is_not_blocking: true
+
+  steps:
+    - intake
+    - recruitment_analysis
+    - codex_fact_check
+    - creative_direction
+    - codex_direction_approval
+    - image_generation
+    - creative_review
+    - codex_final_qa
+    - revision_if_needed
+    - human_final_approval
+
+  owners:
+    intake: codex_cco
+    recruitment_analysis: recruitment_analyst
+    codex_fact_check: codex_cco
+    creative_direction: creative_director
+    codex_direction_approval: codex_cco
+    image_generation: python_image_utility
+    creative_review: creative_reviewer
+    codex_final_qa: codex_cco
+    human_final_approval: human
+
+  image_generation:
+    required_text_strategy: deterministic_python_overlay
+    image_model_should_render_required_text: false
+    required_outputs:
+      - final_image
+      - companion_copy_markdown
+    copy_markdown_suffix: -copy.md
+
+  statuses:
+    - awaiting_input
+    - analyzing
+    - directing
+    - generating
+    - reviewing
+    - revision
+    - needs_clarification
+    - needs_human_review
+    - completed
+
+  gates:
+    fact_check:
+      owner: codex_cco
+      after: recruitment_analysis
+      purpose: 求人事実の誤り・創作を止める
+
+    direction_approval:
+      owner: codex_cco
+      after: creative_direction
+      purpose: 戦略・コピー・アート・Prompt・Overlay Textの一貫性を生成前に確認する
+
+    final_qa:
+      owner: codex_cco
+      after: creative_review
+      purpose: 求人事実・完成画像・copy.mdを最終横断確認する
+
+  revision:
+    max_count: 3
+    return_to_responsible_specialist: true
+
+  delivery:
+    human_approval_required: true
+    require_image_and_copy_file: true
+
+  phase2_later:
+    - detailed_manifest
+    - bulk_generation
+    - automated_cost_guard
+    - contact_sheet_automation
+    - slack_intake
+    - server_side_orchestration
