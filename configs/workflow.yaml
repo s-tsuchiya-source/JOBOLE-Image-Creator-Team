@@ -1,58 +1,71 @@
 workflow:
-  mode: quality_first
+  mode: phase1_quality_validation
+
+  goal: >-
+    VSCode Codexを最高責任者として、実求人から少数の高品質広告画像を作り、
+    人間が品質評価できる状態まで最短で到達する。
+
   steps:
     - intake
     - recruitment_analysis
-    - codex_fact_gate
-    - production_strategy
-    - codex_strategy_gate
-    - copy_direction
-    - art_direction
-    - prompt_design
-    - codex_direction_gate
+    - codex_fact_check
+    - creative_direction
+    - codex_direction_approval
     - image_generation
     - creative_review
-    - codex_final_traceability_gate
+    - codex_final_qa
     - revision_if_needed
     - human_final_approval
-    - delivery
+
+  owners:
+    intake: codex_cco
+    recruitment_analysis: recruitment_analyst
+    codex_fact_check: codex_cco
+    creative_direction: creative_director
+    codex_direction_approval: codex_cco
+    image_generation: python_image_utility
+    creative_review: creative_reviewer
+    codex_final_qa: codex_cco
+    human_final_approval: human
 
   statuses:
     - awaiting_input
-    - input_ready
     - analyzing
-    - planning
     - directing
     - generating
-    - review
+    - reviewing
     - revision
     - needs_clarification
     - needs_human_review
     - completed
-    - delivered
-    - blocked
 
   gates:
-    fact_gate:
+    fact_check:
       owner: codex_cco
       after: recruitment_analysis
-    strategy_gate:
+      purpose: 求人事実の誤り・創作を止める
+
+    direction_approval:
       owner: codex_cco
-      after: production_strategy
-    direction_gate:
-      owner: codex_cco
-      after:
-        - copy_direction
-        - art_direction
-        - prompt_design
-    final_traceability_gate:
+      after: creative_direction
+      purpose: 戦略・コピー・アート・Promptの一貫性を生成前に確認する
+
+    final_qa:
       owner: codex_cco
       after: creative_review
+      purpose: Original Request・求人事実・完成画像を最終横断確認する
 
   revision:
     max_count: 3
-    return_to_root_cause_agent: true
-    escalate_after_limit: true
+    return_to_responsible_specialist: true
 
   delivery:
     human_approval_required: true
+
+  phase2_later:
+    - detailed_manifest
+    - bulk_generation
+    - automated_cost_guard
+    - contact_sheet_automation
+    - slack_intake
+    - server_side_orchestration
