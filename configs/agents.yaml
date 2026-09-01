@@ -1,11 +1,31 @@
+chief:
+  codex_cco:
+    file: .codex/chief-creative-officer.md
+    provider: openai
+    schema: schemas/quality-gate.schema.json
+
 agents:
+  recruitment_analyst:
+    file: .claude/agents/recruitment-analyst.md
+    schema: schemas/recruitment-analysis.schema.json
   production_director:
     file: .claude/agents/production-director.md
-  text_director:
-    file: .claude/agents/text-director.md
-  image_director:
-    file: .claude/agents/image-director.md
-  designer:
-    file: .claude/agents/designer.md
-  reviewer:
-    file: .claude/agents/reviewer.md
+    schema: schemas/production-plan.schema.json
+  copy_director:
+    file: .claude/agents/copy-director.md
+    schema: schemas/copy-direction.schema.json
+  art_director:
+    file: .claude/agents/art-director.md
+    schema: schemas/art-direction.schema.json
+  prompt_designer:
+    file: .claude/agents/prompt-designer.md
+    schema: schemas/prompt-package.schema.json
+  creative_reviewer:
+    file: .claude/agents/creative-reviewer.md
+    schema: schemas/creative-review.schema.json
+
+legacy_aliases:
+  text_director: copy_director
+  image_director: art_director
+  designer: prompt_designer
+  reviewer: creative_reviewer
