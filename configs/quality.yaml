@@ -12,6 +12,10 @@ quality:
     copy_candidate_min: 3
     art_candidate_min: 2
   budget:
+    metric: incremental_api_cost_yen
+    text_subscription_incremental_api_cost_yen: 0
+    local_image_incremental_api_cost_yen: 0
+    paid_image_backend: openai
     target_max_yen_per_final_image: 400
     warning_yen_per_final_image: 330
     stop_and_escalate_yen_per_final_image: 400
