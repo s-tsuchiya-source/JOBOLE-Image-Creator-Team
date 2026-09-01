@@ -1,212 +1,158 @@
 # JOBOLE Image Creator Team
 
-JOBOLE向け画像制作を、**Codex Chief Creative Officer + Claude Code専門Agent + 切替可能な画像生成AI**で標準化するAI制作チームです。
+JOBOLE向け広告画像を、**VSCode Codex Chief Creative Officer + Claude 3専門家 + Python画像/ファイル処理**で制作するPhase 1構成です。
 
-## 最終ユーザー体験
+## Phase 1の目的
+まず実求人1件から1〜3枚を作り、AIチームのクリエイティブ品質を人間が評価できる状態にする。
 
-人間はVSCodeのCodexへ、求人原稿・ヒアリング・参考画像・必要に応じた補足テキストを送ります。
-
-```text
-Human
-  ↓
-VSCode Codexへ素材を送る
-  ↓
-Codexが案件作成・Drive格納・制作開始
-  ↓
-Claude Code専門Agent群
-  ↓
-Codex 4段階Quality Gate
-  ↓
-画像生成AI
-  ↓
-Claude Reviewer
-  ↓
-Codex Final QA
-  ↓
-Google Drive / 05_delivery
-  ↓
-Human 最終承認
-```
-
-人間がPythonコマンド・APIキー・案件フォルダを操作することを通常運用にしません。
-
-## 認証・費用設計
-
-### テキストAI
-- Codex CCO → Codex IDE/CLIへChatGPTアカウントでログイン
-- Claude専門Agent → Claude CodeへClaudeサブスクリプションでログイン
-- **テキストAI用APIキーは不要**
-- Codex/Claudeの契約利用枠は消費するが、テキストAPIの従量課金は発生させない設計
-
-### 画像生成
-`.env` の `IMAGE_BACKEND` だけで切り替えます。
-
-```env
-IMAGE_BACKEND=local_webui
-```
-
-初回・開発テスト。AUTOMATIC1111 / SD-WebUI-Forge互換のローカル画像AIを使用し、画像APIの増分費用は0円。
-
-```env
-IMAGE_BACKEND=openai
-```
-
-本番最高品質でOpenAI Image APIを使う場合。OpenAI APIキーはこの画像工程だけに使用します。
+量産・Slack・複雑な状態管理・自動コスト制御より、先に以下を検証する。
+- 求人理解
+- ターゲット理解
+- コピー品質
+- ビジュアル品質
+- 広告としての訴求力
+- 人間制作物との比較
 
 ## AI組織
-
 ```text
-Codex Chief Creative Officer
+Human
+↓
+VSCode Codex = Chief Creative Officer / 最高責任者
 │
 ├─ Claude Recruitment Analyst
-├─ Claude Production Director
-├─ Claude Copy Director
-├─ Claude Art Director
-├─ Claude Prompt Designer
+├─ Claude Creative Director
 └─ Claude Creative Reviewer
 ```
 
-Codexは制作内容を無条件で作り直すのではなく、各専門Agentの成果物を承認・差し戻し・統合する最高責任者です。
+Codexは3専門家を統括し、求人事実確認・クリエイティブ方針承認・差し戻し・最終QAを行う。
 
-## 4段階Quality Gate
-
+## 標準フロー
 ```text
-Recruitment Analyst
+Human
 ↓
-Codex Fact Gate
+VSCode Codex CCO
 ↓
-Production Director
+Claude Recruitment Analyst
 ↓
-Codex Strategy Gate
+Codex Fact Check
 ↓
-Copy + Art + Prompt
+Claude Creative Director
 ↓
-Codex Direction Gate
+Codex Direction Approval
 ↓
-Image Generation
+Python / Image Tool
+画像生成・文字入れ・サイズ調整・保存
 ↓
 Claude Creative Reviewer
 ↓
-Codex Final Traceability Gate
+Codex Final QA
+↓
+Human Final Approval
 ```
 
-## 品質モード
-- Strategy候補: 5案以上
-- Copy候補: 3案以上
-- Art候補: 2案以上
-- 自動修正: 原則最大3回
-- 重大な求人事実エラー: 点数に関係なくREJECT
-- Original Request → 最終画像までTraceabilityを維持
+## 重要な設計原則
+- 今ユーザーと会話しているVSCode Codex自身が最高責任者。
+- PythonからCodexを再度呼び出してCCOを二重化しない。
+- ClaudeはPythonオーケストレーターではなく、Codexが直接Claude Codeで呼ぶ。
+- Pythonは判断をしない。画像・ファイルの機械処理だけを行う。
+- Phase 1ではProduction / Copy / Art / Promptの4Agent分割を使わない。Creative Directorへ統合する。
+- 大量JSON Schemaや4段階の細かいQuality GateはPhase 1本流から外す。
 
-## コスト設計
-- Claude Code / Codex CLIテキスト工程: 増分APIコスト0円として記録
-- local_webui画像: 増分画像APIコスト0円
-- OpenAI画像API: 400円/最終画像をハード上限
-- OpenAI画像API時、未承認Creativeが推定330円以上なら次の有料再生成を開始しない
+## 3専門家
+### Recruitment Analyst
+求人原稿から事実だけを整理し、Fact Sheetを作る。
 
-## データ配置
+### Creative Director
+Fact Sheetと依頼内容から以下を一体設計する。
+- Target
+- Key Message
+- 訴求優先順位
+- Copy Candidates
+- Recommended Copy
+- Art Direction
+- Image Prompt
+- Overlay Text
 
+### Creative Reviewer
+完成画像を独立レビューし、PASS / REVISION / REDESIGNと具体的な問題をCodexへ返す。
+
+## Pythonの役割
+### 使用する
+- `scripts/create_project_from_intake.py`: 案件フォルダ作成・素材コピー
+- `scripts/input_loader.py`: 入力テキスト整理
+- `services/image_generator.py`: 画像生成実行
+- `services/overlay_renderer.py`: 日本語文字入れ
+
+### 使用しない
+`scripts/run_production.py` は旧AIオーケストレーターとしてdeprecated。Phase 1では実行しない。
+
+## 認証
+- Codex CCO: ChatGPTログイン
+- Claude 3専門家: Claude Codeログイン
+- テキストAI用APIキー: 不要
+- OpenAI APIを使う場合: 画像生成だけ
+
+## 画像生成
+画像生成方式そのものを目的にしない。
+
+Phase 1では「既に動く方法」を優先し、ローカル画像AIのトラブルが品質検証を止める場合はOpenAI Image APIへ切り替えてよい。
+
+ローカル画像AIは無料テスト用の補助経路として扱う。
+
+## データ管理
 ```text
 GitHub
-├─ AI Agent定義
-├─ Codex CCO定義
-├─ Schema
-├─ Quality Rule
+├─ Codex / Claude役割
+├─ 品質ルール
 ├─ Workflow
-├─ Script
-└─ Provider実装
+└─ 汎用Pythonユーティリティ
 
 Google Drive
 └─ projects/
-   ├─ PJ-0001_.../
-   ├─ PJ-0002_.../
-   └─ ...
+   └─ 実案件・求人原稿・参考画像・生成画像・レビュー・納品物
 ```
 
-GitHubには実案件データ・顧客素材・生成画像を保存しません。
+実案件データや顧客素材をGitHubへコミットしない。
 
-## Google Drive案件構造
-
-```text
-PJ-0001_client/
-├─ project.yaml
-├─ creative-manifest.csv
-├─ 00_request/
-│  ├─ inbox/
-│  │  ├─ job_posting/
-│  │  ├─ hearing/
-│  │  └─ references/
-│  └─ normalized/
-├─ 01_strategy/
-├─ 02_direction/
-├─ 03_batches/
-├─ 04_project_review/
-└─ 05_delivery/
-```
-
-## セットアップ確認
-
+## 構造確認
 ```powershell
 python -m pip install -r requirements.txt
 python -m compileall scripts services
 python scripts/validate_system.py
 ```
 
-Claude/Codex CLIと画像設定:
-
-```powershell
-python scripts/validate_system.py --runtime-config
+期待値:
+```text
+SYSTEM VALIDATION: PASS
+Claude specialists: 3
+Codex CCO: VSCode highest authority
+Python AI orchestration: DISABLED
+Text API keys required: NO
 ```
 
-ログイン確認:
-
+Claude/Codexログイン確認:
 ```powershell
 python scripts/validate_system.py --verify-login
 ```
 
-ローカル画像AI接続確認:
-
+画像バックエンド確認は必要な場合だけ:
 ```powershell
-python scripts/check_local_image.py
+python scripts/validate_system.py --verify-image
 ```
 
-## 手動dry-run
-
-```powershell
-python scripts/run_production.py PJ-0001 --dry-run
-```
-
-本実行:
-
-```powershell
-python scripts/run_production.py PJ-0001
-```
-
-通常の利用者はこれらを直接操作せず、VSCodeのCodexが `AGENTS.md` に従って内部実行します。
-
-## Codexからの自動受付
-
-Codexは `scripts/create_project_from_intake.py` を使用します。
-
-```powershell
-python scripts/create_project_from_intake.py `
-  --project-name "案件名" `
-  --quantity 1 `
-  --job-posting "C:\path\求人原稿.xlsx" `
-  --hearing "C:\path\ヒアリング.docx" `
-  --reference "C:\path\参考画像.png"
-```
-
-補足テキストも追加できます。
-
-## 詳細手順
-
-`docs/live-setup.md` を参照してください。
+## Phase 2以降
+Phase 1で品質が確認できてから追加を検討する。
+- 10〜100枚量産
+- 詳細manifest
+- 自動修正ループ
+- コスト自動管理
+- Contact Sheet自動化
+- Slack受付
+- Cloud常駐処理
+- Agent再細分化
 
 ## 開発方針
 - `main` は安定版
 - 変更はfeature branch + Pull Request
-- APIキーや認証情報はGitHubへコミットしない
-- 案件画像や顧客データはGitHubへ保存しない
-- AI判断ルールはMarkdown/Schema/Configで検証可能にする
 - 人間の最終承認前に外部納品しない
+- 複雑化する前に「本当に画像品質を上げるか」を確認する
