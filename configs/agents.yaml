@@ -1,27 +1,40 @@
 chief:
   codex_cco:
     file: .codex/chief-creative-officer.md
-    provider: openai
+    provider: codex_cli
+    auth: chatgpt_login
     schema: schemas/quality-gate.schema.json
 
 agents:
   recruitment_analyst:
     file: .claude/agents/recruitment-analyst.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/recruitment-analysis.schema.json
   production_director:
     file: .claude/agents/production-director.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/production-plan.schema.json
   copy_director:
     file: .claude/agents/copy-director.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/copy-direction.schema.json
   art_director:
     file: .claude/agents/art-director.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/art-direction.schema.json
   prompt_designer:
     file: .claude/agents/prompt-designer.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/prompt-package.schema.json
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
+    provider: claude_code
+    auth: subscription_login
     schema: schemas/creative-review.schema.json
 
 legacy_aliases:
