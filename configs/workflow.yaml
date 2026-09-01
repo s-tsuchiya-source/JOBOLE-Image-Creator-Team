@@ -8,8 +8,8 @@ workflow:
     - codex_strategy_gate
     - copy_direction
     - art_direction
-    - codex_direction_gate
     - prompt_design
+    - codex_direction_gate
     - image_generation
     - creative_review
     - codex_final_traceability_gate
@@ -44,6 +44,7 @@ workflow:
       after:
         - copy_direction
         - art_direction
+        - prompt_design
     final_traceability_gate:
       owner: codex_cco
       after: creative_review
