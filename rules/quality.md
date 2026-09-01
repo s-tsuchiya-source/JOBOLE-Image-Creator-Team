@@ -1,12 +1,12 @@
 # Quality Rules
 
 ## 品質の定義
-本システムにおける品質は「見た目が良いこと」だけではない。Original Request、求人事実、ヒアリング要望、制作戦略、コピー、Art Direction、完成画像が一貫していることを最重要とする。
+本システムにおける品質は「見た目が良いこと」だけではない。Original Request、求人事実、ヒアリング要望、制作戦略、コピー、Art Direction、Prompt、完成画像が一貫していることを最重要とする。
 
 ## Quality Gate原則
 1. Recruitment Analysis後にCodex Fact Gateを通す。
 2. Production Strategy後にCodex Strategy Gateを通す。
-3. Copy / Art Direction後にCodex Direction Gateを通す。
+3. Copy / Art / Prompt Design後にCodex Direction Gateを通す。
 4. Creative Reviewer後にCodex Final Traceability Gateを通す。
 5. Gate未通過の成果物を次工程へ渡さない。
 
@@ -15,6 +15,8 @@
 
 ```text
 Generated Image
+  ↓
+Approved Prompt
   ↓
 Approved Copy / Art Direction
   ↓
@@ -45,6 +47,7 @@ Original Job Posting / Hearing
 - 画像の破綻がない
 - 媒体規格に沿っている
 - CopyとArtが同じ訴求を強化している
+- Promptが承認済みCopy/Artを勝手に変更していない
 - Original Requestと最終画像が一致している
 
 ## コンペ原則
@@ -61,9 +64,10 @@ Original Job Posting / Hearing
 - 3回で解決しない場合は `needs_human_review` とする。
 
 ## コストガード
-- 最終画像1枚あたりの目標上限: 400円
-- 350円到達でwarning
-- 450円見込みで自動継続せず人間へエスカレーション
+- 最終画像1枚あたりのハード上限: 400円
+- 330円到達時点で、未承認Creativeの次の有料自動修正を開始しない。
+- 400円到達時は自動継続せず `needs_human_review` とする。
+- live実行時は、為替・Claude・Codex・画像生成の料金設定が揃っていない場合は制作を開始しない。
 
 ## NG例
 - 根拠不明のNo.1表現
