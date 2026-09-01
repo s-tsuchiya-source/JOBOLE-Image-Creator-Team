@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from services.providers import OpenAIProvider, ProviderResult
+from services.providers import CodexCliProvider, ProviderResult
 from services.schema_validator import load_schema, validate_data
 
 
@@ -26,11 +26,17 @@ def run_codex_gate(
     *,
     original_request: dict[str, Any],
     upstream_outputs: dict[str, Any],
-    provider: OpenAIProvider | None = None,
+    provider: CodexCliProvider | None = None,
     image_path: Path | None = None,
 ) -> ProviderResult:
+    """Execute a CCO gate via local Codex CLI authenticated with ChatGPT.
+
+    OPENAI_API_KEY is intentionally stripped from the Codex child process.
+    The API key may still exist in the parent process for the optional OpenAI
+    image backend, but it must never be used for CCO text work.
+    """
     schema = load_schema(QUALITY_SCHEMA)
-    provider = provider or OpenAIProvider()
+    provider = provider or CodexCliProvider()
     input_payload = {
         "gate_to_execute": gate,
         "original_request": original_request,
