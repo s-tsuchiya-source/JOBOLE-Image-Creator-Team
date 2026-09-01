@@ -1,4 +1,2 @@
-creative_id,theme,target,format,message,status,version,score
-CR001,サポート訴求,代理店,1200x628,商談同席の安心感,pending,0,
-CR002,収益訴求,代理店,1200x1200,継続商材としての魅力,pending,0,
-CR003,導入簡単訴求,代理店,960x1200,始めやすさ,pending,0,
+project_id,creative_group_id,creative_id,batch_id,theme,target,message,format,width,height,copy_status,art_status,prompt_status,generation_status,review_status,version,claude_score,codex_score,final_score,revision_count,prompt_path,image_path,review_path,cost_yen,status,updated_at
+PJ-0001,CG001,CR001,B001,サポート訴求,代理店,商談同席の安心感,1200x628,1200,628,pending,pending,pending,pending,pending,0,,,,0,,,,0,pending,
