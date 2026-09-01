@@ -34,6 +34,17 @@ def _overlay_items(args: argparse.Namespace) -> list[dict]:
                 "placement": args.subcopy_placement,
             }
         )
+
+    # Bottom-anchored items are processed from the bottom upward. Put CTA first
+    # so the action remains closest to the bottom edge, then stack fact text above it.
+    if args.cta.strip():
+        items.append(
+            {
+                "role": "cta",
+                "text": args.cta,
+                "placement": args.cta_placement,
+            }
+        )
     for value in args.fact:
         if value.strip():
             items.append(
@@ -43,14 +54,6 @@ def _overlay_items(args: argparse.Namespace) -> list[dict]:
                     "placement": args.fact_placement,
                 }
             )
-    if args.cta.strip():
-        items.append(
-            {
-                "role": "cta",
-                "text": args.cta,
-                "placement": args.cta_placement,
-            }
-        )
     return items
 
 
