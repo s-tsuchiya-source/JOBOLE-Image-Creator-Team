@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from services.image_generator import OpenAIImageGenerator, parse_dimensions
+from services.image_generator import create_image_generator, parse_dimensions
 from services.image_review import review_image
 from services.manifest import load_rows, write_rows
 from services.overlay_renderer import render_overlay
@@ -82,7 +82,9 @@ def produce_creatives(
     if not rows:
         raise PipelineStop("blocked", "creative-manifest.csv has no creatives.")
 
-    image_generator = OpenAIImageGenerator()
+    # Initial tests use IMAGE_BACKEND=local_webui (no image API fee).
+    # Production can switch to IMAGE_BACKEND=openai without changing workflow code.
+    image_generator = create_image_generator()
     shared_cost = tracker.total_estimated_cost_yen()
     quantity = len(rows)
 
@@ -122,6 +124,7 @@ def produce_creatives(
             background_path = generated_dir / f"v{version:02d}_background.png"
             final_path = generated_dir / f"v{version:02d}.png"
             prompt = str(prompt_package.get("prompt") or "").strip()
+            negative_prompt = str(prompt_package.get("negative_prompt") or "").strip()
             prompt += (
                 f"\n\nThis output is creative {creative_id}, variation {row_index + 1} of {quantity}. "
                 f"Target final canvas is {width}x{height}. Preserve approved message and composition, "
@@ -132,13 +135,14 @@ def produce_creatives(
 
             image_generator.generate(
                 prompt=prompt,
+                negative_prompt=negative_prompt,
                 width=width,
                 height=height,
                 output_path=background_path,
             )
             tracker.record_image(
                 f"image_generation:{creative_id}:v{version}",
-                provider="openai",
+                provider=image_generator.provider_name,
                 model=image_generator.model,
                 count=1,
             )
@@ -159,6 +163,7 @@ def produce_creatives(
                 "copy_direction": direction["copy_direction"],
                 "art_direction": direction["art_direction"],
                 "prompt_package": prompt_package,
+                "image_backend": image_generator.provider_name,
             }
             review_result = review_image(image_path=final_path, context=review_context)
             tracker.record_text(f"creative_review:{creative_id}:v{version}", review_result)
@@ -220,8 +225,9 @@ def produce_creatives(
                 write_rows(manifest_path, rows)
                 break
 
-            # Do not spend on another automatic revision once the current estimated
-            # cost is already near the 400 JPY hard ceiling.
+            # Local image generation is zero incremental API cost, so cost guards
+            # naturally stay at 0 JPY during the first local-AI test. Revision count
+            # and quality gates still protect against infinite loops.
             if estimated_cost is not None and estimated_cost >= revision_ceiling_yen:
                 row["status"] = "needs_human_review"
                 row["review_status"] = "budget_revision_guard"
