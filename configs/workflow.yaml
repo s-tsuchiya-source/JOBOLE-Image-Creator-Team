@@ -30,11 +30,13 @@ workflow:
     layout_config: configs/layouts.yaml
     design_spec_contract: services/design_spec.py
     renderer: services/overlay_renderer.py
+    preview_script: scripts/preview_design_spec.py
     image_model_renders_required_text: false
     semantic_line_breaks_owner: creative_director
     emphasis_owner: creative_director
     exact_text_rendering_owner: python_renderer
     multiple_creatives_should_not_all_share_one_layout: true
+    preview_before_paid_generation: true
 
   token_efficiency:
     compact_context_first: true
@@ -42,7 +44,7 @@ workflow:
     max_benchmarks: 3
     max_visual_routes: 2
     max_fact_chips: 3
-    reuse_design_spec_for_renderer_and_reviewer: true
+    reuse_design_spec_for_preview_renderer_and_reviewer: true
     root_cause_revision_only: true
 
   steps:
@@ -54,6 +56,8 @@ workflow:
     - creative_direction
     - codex_design_spec_approval
     - design_spec_save
+    - design_spec_preview
+    - codex_preview_approval
     - image_generation
     - design_spec_rendering
     - creative_review
@@ -70,6 +74,8 @@ workflow:
     creative_direction: creative_director
     codex_design_spec_approval: codex_cco
     design_spec_save: codex_cco
+    design_spec_preview: python_renderer
+    codex_preview_approval: codex_cco
     image_generation: python_image_utility
     design_spec_rendering: python_renderer
     creative_review: creative_reviewer
@@ -88,6 +94,7 @@ workflow:
     creative_context_required: true
     approved_design_spec_required: true
     design_spec_default_path: 02_direction/<creative-id>-design-spec.json
+    typography_preview_required: true
     required_text_strategy: deterministic_python_design_spec
     required_outputs:
       - final_image
@@ -106,7 +113,11 @@ workflow:
 
     design_spec_approval:
       owner: codex_cco
-      purpose: Layout Family・意味改行・強調語・写真構図・日本語文言を生成前に固定する
+      purpose: Layout Family・意味改行・強調語・写真構図・日本語文言を固定する
+
+    preview_approval:
+      owner: codex_cco
+      purpose: 画像生成コストを使う前にTypography・改行・情報階層を仮背景で確認する
 
     final_qa:
       owner: codex_cco
