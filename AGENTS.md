@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Goal
-求人ファイルだけでも、**案件作成 → Fact確認 → benchmark選定 → Design Spec作成 → 文字なし画像生成 → Python高品質Typography → Review → Drive保存**まで進める。
+求人ファイルだけでも、**案件作成 → Fact確認 → benchmark選定 → Design Spec作成 → 無料Typography Preview → 文字なし画像生成 → Python高品質Typography → Review → Drive保存**まで進める。
 
 Phase 1 v3ではAgent数を増やさず、Codex CCO + Claude 3専門家 + Design Spec Rendererで品質を上げる。
 
@@ -16,12 +16,10 @@ Phase 1 v3ではAgent数を増やさず、Codex CCO + Claude 3専門家 + Design
 ## Source Priority
 1. 求人ファイル = Fact正本
 2. ヒアリング = 希望/媒体/枚数/NG/テイスト
-3. 補足テキスト = 追加希望
+3. 補足テキスト
 4. `ORIGINAL_IMAGE_ROOT` = デザインbenchmark
 
 ## Project First
-最初に案件を作成する。
-
 ```powershell
 python scripts/create_project_from_intake.py --job-posting "<求人>" --hearing "<optional>"
 ```
@@ -57,10 +55,10 @@ JOBOLE（4:3） -> 1200x900 / 4:3
 
 ## AI Organization
 ### Codex CCO
-最高責任者。
 - Fact Gate
 - Benchmark Gate
 - Design Spec Gate
+- Typography Preview Gate
 - Layout Familyの使い分け
 - Revision Routing
 - Final QA
@@ -93,14 +91,16 @@ JOBOLE（4:3） -> 1200x900 / 4:3
 - Generation Artifact
 
 ## Design Spec First
-方式Aの正式経路:
-
 ```text
 Creative Director
 ↓
 Codex Approval
 ↓
 02_direction/CR001-design-spec.json
+↓
+Python Preview
+↓
+Codex Preview Approval
 ↓
 Image AI = 文字なし背景
 ↓
@@ -119,7 +119,7 @@ Pythonへデザイン判断を委譲しない。
 - benefit_stack
 - emotional_message
 
-複数枚案件で全て同じFamilyへ流し込まない。訴求に合わせて変える。
+複数枚案件で全て同じFamilyへ流し込まない。
 
 ## Design Spec Contract
 `services/design_spec.py`
@@ -139,7 +139,22 @@ Pythonへデザイン判断を委譲しない。
 - benchmark_refs 最大3
 - decorations
 
-Headlineの意味改行はCreative Directorが決める。Pythonの自動折返しは最終fallbackのみ。
+Headlineの意味改行はCreative Directorが決める。Python自動折返しは最終fallbackのみ。
+
+## Preview Before Image Cost
+```powershell
+python scripts/preview_design_spec.py --project-id PJ-XXXX --creative-id CR001
+```
+
+確認:
+- 意味改行
+- 強調語/数字
+- Layout Family
+- Fact/CTA密度
+- 余白
+- テンプレ感
+
+Previewで直せる問題のために画像AIを再生成しない。
 
 ## Fixed Workflow
 ```text
@@ -161,7 +176,9 @@ Creative Director
 ↓
 Codex Design Spec Gate
 ↓
-02_direction/<creative-id>-design-spec.json
+Design Spec Preview
+↓
+Codex Preview Gate
 ↓
 Image Generation (no required text)
 ↓
@@ -177,6 +194,7 @@ Human Final Approval
 ## Formal Output
 ```text
 02_direction/<creative-id>-design-spec.json
+02_direction/previews/<creative-id>-design-preview.png
 03_batches/<creative-id>/v001/background.png
 03_batches/<creative-id>/v001/image-prompt.txt
 03_batches/<creative-id>/v001/design-spec.json
@@ -185,22 +203,22 @@ Human Final Approval
 ```
 
 ## Generate
+Preview PASS後:
 ```powershell
 python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 ```
 
-標準では `02_direction/CR001-design-spec.json` を自動使用する。
-
-## Token Efficiency
+## Token / Cost Efficiency
 - compact context first
 - raw source fallback only
 - Claude出力 compact JSON
 - benchmark最大3
 - route最大2
 - Fact最大3
-- Design SpecをRenderer/Reviewerで再利用
+- Design SpecをPreview/Renderer/Reviewerで再利用
 - Revision最大2
 - root cause工程だけ再実行
+- PreviewでTypography問題を先に潰す
 
 ## Python Responsibilities
 やってよい:
@@ -209,8 +227,9 @@ python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 - compact context
 - benchmark catalog/contact sheet
 - media size resolution
-- image generation
 - Design Spec validation
+- typography preview
+- image generation
 - exact Japanese rendering
 - copy.md / save / resize
 
