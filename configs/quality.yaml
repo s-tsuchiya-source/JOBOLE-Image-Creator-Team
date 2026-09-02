@@ -17,17 +17,28 @@ quality:
     selection_owner: codex_cco
     python_may_auto_select: false
 
-  premium_creative_spec:
+  creative_spec:
     required_before_generation: true
     contract: services/creative_spec.py
+    mode: codex_integrated
+    generation_owner: codex_integrated_creative_designer
+    generation_capability: codex_imagegen
     required_text_block_typical_max: 5
     required_text_block_hard_max: 6
     benchmark_ref_max: 3
     image_prompt_required: true
-    image_model_required_text: true
     no_extra_readable_text: true
+    silent_api_fallback_allowed: false
+
+  integrated_design:
+    photo_typography_integration_required: true
+    generic_template_repetition_blocks_delivery: true
+    multi_creative_diversity_required_when_quantity_gt_1: true
+    prefer_edit_before_regenerate_for_local_defect: true
+    visual_quality_target: top_tier_japanese_recruitment_ad
 
   text_verification:
+    codex_designer_self_check_required: true
     local_ocr_optional: true
     local_ocr_single_source_of_truth: false
     claude_visual_readback_required: true
@@ -53,7 +64,10 @@ quality:
     - critical_number_mismatch
     - invented_extra_text
     - unreadable_typography
-    - poor_integrated_design_quality
+    - generic_ai_poster
+    - mechanical_template_repetition
+    - poor_photo_typography_integration
+    - insufficient_multi_creative_diversity
     - major_generation_artifact
     - unreviewed_candidate
 
@@ -63,23 +77,28 @@ quality:
     compact_json_outputs: true
     reuse_creative_spec_downstream: true
     ocr_report_summary_only: true
+    prefer_local_image_edit: true
     root_cause_revision_only: true
     rerun_all_agents: false
 
-  budget:
+  primary_generation:
+    mode: codex_imagegen
+    direct_openai_api_required: false
+    api_key_required_by_project: false
+    imagegen_capability_unavailable_action: stop_and_escalate
+
+  api_fallback_budget:
+    applies_only_when_user_explicitly_approves_api_fallback: true
     metric: incremental_api_cost_yen
-    text_subscription_incremental_api_cost_yen: 0
-    local_image_incremental_api_cost_yen: 0
-    paid_image_backend: openai
     target_max_yen_per_final_image: 400
     warning_yen_per_final_image: 330
     stop_and_escalate_yen_per_final_image: 400
-    do_not_start_another_revision_at_or_above_yen: 330
 
   fallback:
-    premium_text_retry_max: 2
+    codex_imagegen_text_retry_max: 2
     safe_mode_after_repeated_text_error: allowed_by_codex_only
-    safe_mode_is_not_default: true
+    direct_api_fallback: explicit_user_approval_only
+    silent_api_fallback: forbidden
 
   promotion:
     candidate_first: true
@@ -92,5 +111,5 @@ quality:
   human_review:
     always_required_before_external_delivery: true
     escalate_on_revision_limit: true
-    escalate_on_budget_limit: true
     escalate_on_unresolved_fact: true
+    escalate_when_imagegen_capability_unavailable: true
