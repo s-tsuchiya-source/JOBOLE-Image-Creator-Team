@@ -17,7 +17,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# For local project operation, .env is the source of truth.
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.image_generator import check_image_backend
@@ -113,8 +112,7 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         if previous in positions and following in positions and positions[previous] >= positions[following]:
             errors.append(f"Workflow order invalid: {previous} must precede {following}")
 
-    deprecated_run = REPO_ROOT / "scripts" / "run_production.py"
-    if not deprecated_run.exists():
+    if not (REPO_ROOT / "scripts" / "run_production.py").exists():
         errors.append("Deprecated run_production shim is missing")
 
     required_python_utilities = [
@@ -141,6 +139,8 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
 
     if "PROJECT_DIR=" not in create_project_text:
         errors.append("Project intake must print PROJECT_DIR for Codex CCO")
+    if "QUANTITY_SOURCE=" not in create_project_text:
+        errors.append("Project intake must preserve hearing-derived quantity source")
     if "ORIGINAL_IMAGE_ROOT" not in prepare_context_text or "reference-contact-sheet" not in prepare_context_text:
         errors.append("Creative context preparation must index the original_image benchmark library")
     if "creative-context.json" not in generate_text:
@@ -151,8 +151,8 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         errors.append("Creative generation must save final output inside 05_delivery")
     if 'project_dir / "03_batches"' not in generate_text:
         errors.append("Creative generation must save generation artifacts inside 03_batches")
-    if "modern_recruit" not in overlay_text:
-        errors.append("Recruitment typography renderer must provide modern_recruit style")
+    if "benchmark_recruit" not in overlay_text:
+        errors.append("Recruitment typography renderer must provide benchmark_recruit style")
     if "ORIGINAL_IMAGE_ROOT=" not in env_example:
         errors.append(".env.example must define ORIGINAL_IMAGE_ROOT")
     if "REFERENCE_SHORTLIST_MAX=" not in env_example:
@@ -162,27 +162,37 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
     messages.append("Minimum intake: job file required; hearing/text optional")
     messages.append("Compact context: REQUIRED before Claude/image generation")
     messages.append("Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3")
-    messages.append("Hearing media spec: overrides generic size defaults")
+    messages.append("Hearing quantity/media: overrides generic Phase 1 defaults")
     messages.append("Project-scoped generation: REQUIRED before any final image")
     messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
-    messages.append("Typography: modern_recruit hierarchy + deterministic Japanese overlay")
+    messages.append("Typography: benchmark_recruit default + deterministic Japanese overlay")
+
+
+def _benchmark_root() -> tuple[Path | None, str]:
+    configured = os.getenv("ORIGINAL_IMAGE_ROOT", "").strip()
+    if configured:
+        return Path(configured), "ORIGINAL_IMAGE_ROOT"
+
+    projects_root = os.getenv("PROJECTS_ROOT", "").strip()
+    if projects_root:
+        return Path(projects_root).parent / "original_image", "derived_from_PROJECTS_ROOT"
+    return None, "unresolved"
 
 
 def validate_benchmark_runtime(errors: list[str], messages: list[str]) -> None:
-    configured = os.getenv("ORIGINAL_IMAGE_ROOT", "").strip()
-    if not configured:
+    root, source = _benchmark_root()
+    if root is None:
         if os.getenv("BENCHMARK_REFERENCE_REQUIRED", "true").lower() == "true":
-            errors.append("ORIGINAL_IMAGE_ROOT is required when BENCHMARK_REFERENCE_REQUIRED=true")
+            errors.append("Benchmark root cannot be resolved. Set ORIGINAL_IMAGE_ROOT or PROJECTS_ROOT.")
         return
 
-    root = Path(configured)
     if not root.exists():
-        errors.append(f"ORIGINAL_IMAGE_ROOT does not exist: {root}")
+        errors.append(f"Benchmark root does not exist: {root} (source={source})")
         return
 
     extensions = {".png", ".jpg", ".jpeg", ".webp"}
     count = sum(1 for path in root.rglob("*") if path.is_file() and path.suffix.lower() in extensions)
-    messages.append(f"Benchmark library: OK ({root}, images={count})")
+    messages.append(f"Benchmark library: OK ({root}, images={count}, source={source})")
     if count == 0:
         messages.append("Benchmark library warning: folder exists but currently has no image samples")
 
