@@ -1,8 +1,27 @@
 # JOBOLE Image Creator Team
 
-**Phase 1 Design Spec Quality v3**
+**Phase 1 Premium Integrated AI v4**
 
-JOBOLE向け求人広告画像を、**VSCode Codex CCO + Claude 3専門家 + Python Design Spec Renderer**で制作します。
+JOBOLE向け求人広告画像を、**VSCode Codex CCO + Claude 3専門家 + Premium Image AI + Python品質管理**で制作します。
+
+## 最重要方針
+標準は `Premium Mode`。
+
+```text
+Image AI
+→ 人物・背景・装飾・日本語Typographyまで一体で完成広告を生成
+
+Claude / Codex
+→ Fact・Hearing・Benchmark・文字・デザイン品質を審査
+
+Python
+→ Project / Context / Generation / OCR補助 / Candidate管理 / Delivery promotion
+```
+
+Pythonが広告デザインを作るのではありません。
+旧Python Typographyは `Safe Mode` fallbackとして残します。
+
+詳細設計: `docs/premium-integrated-ai-v4.md`
 
 ## User Intake
 必須:
@@ -12,7 +31,7 @@ JOBOLE向け求人広告画像を、**VSCode Codex CCO + Claude 3専門家 + Pyt
 - ヒアリングシート
 - 補足テキスト
 
-求人ファイル1つだけでも制作可能です。
+求人ファイル1つだけでも制作できます。
 
 ## AI Organization
 ```text
@@ -24,233 +43,251 @@ VSCode Codex = Chief Creative Officer / 最高責任者
 └─ Claude Creative Reviewer
 ```
 
-## Core Rendering Principle: 方式A
-重要な日本語文字を画像AIへ描かせません。
-
-```text
-Image AI
-→ 人物・仕事内容・背景・構図・光・余白
-
-Claude Creative Director
-→ Copy + Layout Family + 意味改行 + 強調語/数字 + Accent + Design Spec
-
-Python
-→ 承認済みDesign Specを正確に描画
-```
-
-Pythonがデザインを考えるのではありません。
-**Creative Directorが人間のArt DirectorのようにDesign Specを作り、PythonはFigma/Rendererのように再現します。**
-
-## Layout Families
-`configs/layouts.yaml`
-
-- `numeric_impact`: 給与・時給・徒歩分数・休日数等
-- `short_power_word`: ブランクOK・未経験OK・土日休み等
-- `concept_message`: スポーツ×福祉等の仕事コンセプト
-- `work_scene`: 仕事内容/人物/職場写真を主役にする
-- `benefit_stack`: 複数メリットを整理して見せる
-- `emotional_message`: やりがい・支援・成長等
-
-複数枚案件で全画像を同じLayout Familyへ流し込みません。訴求の性質に合わせて見せ方を変えます。
-
-## Design Spec
-Creative Directorの承認案は:
-```text
-02_direction/CR001-design-spec.json
-```
-へ保存します。
-
-主な項目:
-```json
-{
-  "layout_family": "numeric_impact",
-  "accent_color": "#1F95B4",
-  "text_zone": "left",
-  "headline": {
-    "lines": ["月給33万750円〜", "42万8,750円"],
-    "emphasis": ["33万750円", "42万8,750円"]
-  },
-  "subcopy": {"text": "児童発達支援管理責任者"},
-  "facts": ["駅徒歩4分"],
-  "cta": {"text": "詳しく見る"},
-  "image": {"prompt": "...", "negative_prompt": "..."},
-  "benchmark_refs": ["R0001"]
-}
-```
-
-`services/design_spec.py` が検証し、`services/overlay_renderer.py` が描画します。
-
-## Why This Avoids Mechanical Design
-旧方式:
-```text
-Headline -> 左上
-Subcopy -> その下
-Fact -> 同じChip
-CTA -> 同じButton
-```
-
-v3:
-```text
-Fact / Hearing / Benchmark
-↓
-Claudeが訴求を判断
-↓
-Layout Family選択
-↓
-意味単位のHeadline改行
-↓
-強調語/数字指定
-↓
-写真と文字の位置関係指定
-↓
-Pythonが正確に描画
-```
-
-固定テンプレではなく、**半構造化Design System**です。
-
-## Zero-Cost Typography Preview
-画像AIを呼ぶ前に、仮背景上でTypographyだけ確認します。
-
-```powershell
-python scripts/preview_design_spec.py --project-id PJ-XXXX --creative-id CR001
-```
-
-出力:
-```text
-02_direction/previews/CR001-design-preview.png
-```
-
-ここで:
-- 意味改行
-- 強調語/数字
-- Layout Family
-- Fact/CTA密度
-- 余白
-- 機械的テンプレ感
-
-を確認し、弱ければ画像生成前に修正します。これにより画像APIの無駄打ちも防ぎます。
-
-## original_image Benchmark
+## Benchmark Library
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
 ```
 
-`scripts/prepare_creative_context.py` がcatalog/contact sheetを作り、Codex CCOが案件に合う参考を最大3件選びます。
+制作前にPythonがcatalog/contact sheetを作り、Codex CCOが案件に合う参考を最大3件選びます。
 
-## Project Hard Rule
-正式成果物は必ず:
+## Project Storage
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ```
-配下へ保存します。
 
-```text
-PROJECT_DIR/
-├─ 00_request/
-├─ 01_strategy/
-├─ 02_direction/
-│  ├─ CR001-design-spec.json
-│  └─ previews/CR001-design-preview.png
-├─ 03_batches/CR001/v001/
-│  ├─ background.png
-│  ├─ image-prompt.txt
-│  └─ design-spec.json
-├─ 04_project_review/
-└─ 05_delivery/
-   ├─ CR001.png
-   └─ CR001-copy.md
+正式成果物をDesktop/repo/tmpへ代替保存しません。
+
+## Render Modes
+### Premium Mode — default
+```env
+CREATIVE_RENDER_MODE=premium_ai
+PREMIUM_IMAGE_BACKEND=openai
 ```
+
+画像AIが完成バナーを一体生成します。
+- photography
+- composition
+- decoration
+- Japanese typography
+- exact required copy
+
+Creative Directorが `02_direction/CR001-creative-spec.json` を作ります。
+
+### Safe Mode — fallback
+```env
+CREATIVE_RENDER_MODE=safe_python
+SAFE_IMAGE_BACKEND=openvino_ovms
+```
+
+Premiumで文字誤りが解消しない、数値変更が頻繁等の場合のみCodex CCOが選択します。
+
+## Premium Creative Spec
+`services/creative_spec.py`
+
+```json
+{
+  "version": "4.0",
+  "mode": "premium_integrated",
+  "benchmark_refs": ["R0001"],
+  "text_contract": [
+    {
+      "id": "T001",
+      "role": "headline",
+      "text": "スポーツ×福祉",
+      "required": true,
+      "fact_ids": ["F003"],
+      "allow_visual_line_breaks": true,
+      "priority": 1
+    }
+  ],
+  "design_direction": {
+    "visual_style": "",
+    "typography_style": "",
+    "composition": "",
+    "text_zone": "left",
+    "accent_color": "#E85A3D",
+    "color_system": "",
+    "decoration": "",
+    "photo_direction": ""
+  },
+  "image": {
+    "prompt": "",
+    "negative_prompt": ""
+  },
+  "forbidden_extra_text": []
+}
+```
+
+画像AIへコピーを自由創作させず、`text_contract` を正本にします。
 
 ## Standard Workflow
 ```text
-求人ファイル + optional hearing/text
+求人 + optional Hearing/Text
 ↓
-Codex CCO: Project作成
+Codex Project Gate
 ↓
-Python: creative-context + benchmark catalog/contact sheet
+Python creative-context / benchmark catalog
 ↓
 Recruitment Analyst
+Fact + Evidence + verbatim strings
 ↓
 Codex Fact Gate
 ↓
 Codex Benchmark Gate
 ↓
-Creative Director -> Design Spec
+Creative Director
+最大2route → Premium Creative Spec
 ↓
-Codex Design Spec Approval
+Codex Creative Spec Gate
 ↓
-Python Typography Preview
+python scripts/generate_creative.py
 ↓
-Codex Preview Approval
+Candidate only
 ↓
-Image AI: 文字なし背景
+Optional Local OCR
 ↓
-Python Design Spec Renderer
-↓
-Creative Reviewer
+Claude Reviewer visual text readback + creative review
 ↓
 Codex Final QA
+↓
+Final Approval JSON
+↓
+python scripts/promote_creative.py
+↓
+05_delivery
 ↓
 Human Final Approval
 ```
 
-## Hearing Priority
-ヒアリングはgeneric defaultより優先します。
+## Candidate First
+`generate_creative.py` は未審査画像を `05_delivery` へ入れません。
 
-例:
 ```text
-JOBOLE（4:3） -> 1200x900 / 4:3
+03_batches/CR001/v001/
+├─ candidate.png
+├─ creative-spec.json
+├─ expected-copy.md
+├─ image-prompt.txt
+└─ generation-metadata.json
+
+04_project_review/
+└─ CR001-v001-text-verification.json
 ```
 
-## Token / Cost Efficiency
-- `creative-context.json` を一次入力
-- raw sourceはFact疑義だけ
-- Agent出力はcompact JSON
-- benchmark最大3
-- Visual Route最大2
-- Fact最大3
-- Design SpecをPreview/Renderer/Reviewerで再利用
-- Revision原則最大2
-- 問題工程だけ再実行
-- Typography問題は画像生成前Previewで潰す
+Reviewer + Codex PASS後だけpromotionします。
 
-## Generate Creative
-Preview PASS後:
-
+## Generate Premium Candidate
 ```powershell
 python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 ```
 
-標準では `02_direction/CR001-design-spec.json` を自動使用します。
-
-## Renderer Smoke Test
-画像APIを使わず、6 Layout Familyを確認できます。
-
+明示Safe Mode:
 ```powershell
-python scripts/test_design_renderer.py
+python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001 --mode safe_python
 ```
 
-出力:
-```text
-tmp/layout-smoke/
+## Text Verification
+文字精度は3層です。
+
+1. Local OCR — optional
+2. Claude visual readback — mandatory
+3. Codex final visual check — mandatory
+
+Local OCR:
+```powershell
+python -m pip install -r requirements-ocr.txt
+python scripts/verify_generated_text.py --project-id PJ-XXXX --creative-id CR001 --version v001
 ```
+
+Tesseract本体/Japanese traineddataが無い場合は `needs_visual_verification` になり、制作は止まりません。
+
+## Final Approval / Promotion
+Codexが以下を満たしたApproval JSONを作成:
+
+```json
+{
+  "creative_id": "CR001",
+  "version": "v001",
+  "creative_reviewer_pass": true,
+  "codex_final_qa_pass": true,
+  "fact_integrity_pass": true,
+  "text_integrity_pass": true
+}
+```
+
+Promotion:
+```powershell
+python scripts/promote_creative.py --project-id PJ-XXXX --creative-id CR001 --version v001 --approval-file "<approval.json>"
+```
+
+初めて:
+```text
+05_delivery/CR001.png
+05_delivery/CR001-copy.md
+05_delivery/CR001-approval.json
+```
+へ入ります。
+
+## Token / Cost Efficiency
+- `creative-context.json` を一次入力
+- raw CSVはFact疑義だけ
+- benchmark最大3
+- route最大2
+- required text block通常最大5、hard max 6
+- Creative Specを生成/OCR/Reviewerで再利用
+- OCR全文をAIへ送らない
+- 文字ミスでFact分析からやり直さない
+- Revision原則最大2
+
+## Python Responsibilities
+### Pythonが行う
+- Project作成
+- input extraction
+- compact context
+- benchmark catalog/contact sheet
+- media size resolution
+- Creative Spec validation
+- image backend invocation
+- optional OCR
+- deterministic text comparison
+- candidate/version management
+- final promotion
+- Safe Mode typography
+
+### Premium ModeでPythonが行わない
+- Copywriting
+- Art Direction
+- Typography design
+- Benchmark final selection
+- Creative pass/fail judgment
 
 ## Validation
 ```powershell
 python -m compileall scripts services
 python scripts/validate_system.py
-python scripts/validate_system.py --runtime-config
 ```
 
-PR/mainではGitHub Actionsでもcompile + structure validationを行います。
+Premium本番設定まで確認:
+```powershell
+python scripts/validate_system.py --runtime-config
+python scripts/validate_system.py --verify-image
+```
+
+期待:
+```text
+SYSTEM VALIDATION: PASS
+Claude specialists: 3
+Codex CCO: VSCode highest authority
+Primary render mode: PREMIUM INTEGRATED AI
+Safe Python typography: FALLBACK ONLY
+```
 
 ## Tuning Priority
 1. `.claude/agents/creative-director.md`
 2. `.claude/agents/creative-reviewer.md`
-3. `configs/layouts.yaml`
-4. `services/overlay_renderer.py`
+3. `original_image` benchmark quality
+4. Premium image model / prompt
 5. `.claude/agents/recruitment-analyst.md`
 6. `.codex/chief-creative-officer.md`
-7. Image Backend
-
-SVG/CSS Rendererは将来の拡張候補として残しますが、Phase 1 v3では外部ブラウザ依存を増やさず、**Python Design Spec Rendererで品質差を検証**します。
+7. OCR helper
+8. Safe Python renderer
