@@ -1,178 +1,115 @@
-# Agent Tuning Guide — Premium Integrated AI v4
+# Agent Tuning Guide — Codex Native ImageGen v5
 
 ## Architecture
 ```text
 VSCode Codex CCO
-├─ Recruitment Analyst
-├─ Creative Director
-└─ Creative Reviewer
-
-Premium Image AI
-→ completed banner including Japanese typography
+├─ Claude Recruitment Analyst
+├─ Claude Creative Director
+├─ Codex Integrated Creative Designer + ImageGen
+└─ Claude Creative Reviewer
 
 Python
-→ context / generation / OCR helper / delivery control
+→ context / candidate registration / OCR helper / delivery control / Safe fallback
 ```
 
-Agent数を増やす前に、active 3Agent・benchmark・Premium Promptを改善する。
+## Tuning Priority
+品質改善は次の順で行う。
+
+1. `.codex/agents/integrated-creative-designer.md`
+2. `original_image` benchmark quality
+3. `.claude/agents/creative-director.md`
+4. `.claude/agents/creative-reviewer.md`
+5. `services/creative_spec.py`
+6. `.claude/agents/recruitment-analyst.md`
+7. `.codex/chief-creative-officer.md`
+8. OCR helper
+9. Safe Python renderer
+
+PythonのLayout Templateへ戻して品質問題を解決しない。
 
 ## Benchmark
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
 ```
 
-Creative Directorへ渡すのはCodexが選んだ最大3件。
+CCOが最大3件を視覚選定する。
+Agentへ大量のreferenceを渡さない。
 
-## Recruitment Analyst
-ファイル: `recruitment-analyst.md`
-
+## Recruitment Analyst Tuning
 改善対象:
-- wrong role
-- wrong employment type
-- wrong salary/time/holiday
-- 画像AIへ渡す正確な表記が曖昧
+- exact role/employment
+- critical numeric facts
+- verbatim claims
+- claim boundaries
+- visual job reality
 
-主要Output:
-- Fact/Evidence
-- `verbatim_claims`
-- `critical_numeric_facts`
-- Claim Boundary
-- Job Reality
+画像品質問題のためにFact Agentを複雑化しない。
 
-ここにCopy/Artを入れない。
-
-## Creative Director
-ファイル: `creative-director.md`
-
-**最も大きい品質レバー。**
-
+## Creative Director Tuning
 改善対象:
-- サンプルより安っぽい
-- TypographyがAI任せで雑
-- 写真と文字が分離
-- コピーが弱い
-- ワンパターン
-- 余計な文字が入る
-
-見るポイント:
+- message axis
+- copy strength
 - benchmark translation
-- Copy量
-- Exact Text Contract
-- Photo Direction
-- Typography Direction
-- Composition
-- Color/Decoration
-- Promptの完成広告指示
+- exact text contract
+- photo/Typography integration direction
+- multi-creative diversity
+- Designerが迷わないbrief
 
-PremiumではPython Layout Familyへ逃げず、一体広告として設計する。
+禁止:
+- ただのPrompt長文化
+- route増殖
+- required text過多
+- Python overlay前提
 
-## Creative Reviewer
-ファイル: `creative-reviewer.md`
+## Codex Integrated Creative Designer Tuning
+最優先。
 
-改善対象:
-- 誤字をPASS
-- 数字違いをPASS
-- デザインが弱いのにPASS
-- OCRだけ見て画像を見ない
-
-必須:
-- visual text readback
-- expected/observed exact match
-- 1-second / 3-second test
-- benchmark polish comparison
+見る:
+- 1枚の完成広告として統合されているか
+- 人物/背景/コピー/Typographyが互いに補強しているか
+- headline rhythm
+- whitespace tension
+- accent language
 - job realism
+- Japanese glyph quality
+- 同案件の他画像との差
 
-ReviewerはCreatorより厳しくする。
+局所不具合はImageGen edit優先。
+全再生成ガチャを繰り返さない。
 
-## Codex CCO
-ファイル: `.codex/chief-creative-officer.md`
+## Reviewer Tuning
+Reviewerは厳しく独立させる。
 
-改善対象:
-- Claude案を鵜呑み
-- unreviewed candidateを納品
-- 文字エラーで全工程再実行
-- OCRを絶対視
-- Safe Modeへ早く逃げすぎる
+Block例:
+- exact text error
+- critical number error
+- generic AI poster
+- stock-photo-plus-caption
+- mechanical repeated template
+- poor photo/Typography integration
+- wrong work scene
+- benchmark品質不足
 
-CCOは:
-- Fact Gate
-- Benchmark Gate
-- Creative Spec Gate
-- Layered Text Integrity Gate
-- Final QA
-- Safe fallback decision
-- Formal Promotion approval
+## ImageGen Capability
+Standard routeはCodex ImageGen。
+Capability unavailableなら自動API fallback禁止。
 
-を管理。
-
-## Premium Image Prompt
-Agentだけでなく実際の画像モデル出力品質も重要。
-
-症状:
-- Typographyが崩れる
-- 余計な文字
-- 写真が汎用的
-- 求人広告ではなくポスター/チラシ風
-
-改善先:
-1. Creative Director `image.prompt`
-2. `services/creative_spec.py` の統合Prompt Contract
-3. Premium image model/backend
-
-## OCR Helper
-`services/text_verifier.py`
-
-OCRは補助。
-
-改善対象:
-- 日本語文字の機械検査
-- 数字の取りこぼし
-- required block照合
-
-ただし装飾文字で誤読するため、Reviewer/Codex visual checkを削らない。
-
-## Safe Mode Renderer
-次の場合だけ調整:
-- Premiumで文字精度が安定しない
-- 数字差し替えが頻繁
-- 緊急修正
-
-対象:
-- `services/design_spec.py`
-- `services/overlay_renderer.py`
-- `configs/layouts.yaml`
-
-Safe Rendererの見た目をPremium品質の上限にしない。
+`IMAGEGEN_CAPABILITY_UNAVAILABLE` をCCOへ返す。
 
 ## Token Efficiency
 - compact context first
-- raw source fallback only
 - benchmark max 3
 - route max 2
-- required text typical max 5
 - Creative Spec reuse
-- OCR全文をAIへ渡さない
+- OCR summary only
 - root cause revision only
+- edit before regenerate
+- raw source only for factual ambiguity
 
-## Feedback Loop
-```text
-実画像FB
-↓
-Fact / Copy / Art / Typography / Text Generation / Image Artifact のどこかを特定
-↓
-案件固有か再発性か判定
-↓
-再発する場合だけAgent/Prompt/Verifierへ一般化
-↓
-次案件で再検証
-```
+## Fallback
+### Safe Python
+文字の完全再現が優先される例外時のみ。
 
-## Tuning Priority
-1. Creative Director
-2. Creative Reviewer
-3. original_image benchmark
-4. Premium image prompt/model
-5. Recruitment Analyst
-6. Codex CCO
-7. OCR helper
-8. Safe Python renderer
+### Direct API
+ユーザー明示承認時だけ。
+Agentが勝手に選ばない。
