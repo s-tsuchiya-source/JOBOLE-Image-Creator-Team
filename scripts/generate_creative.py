@@ -28,16 +28,13 @@ from services.text_verifier import verify_image_text, write_verification
 
 
 SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-ALLOWED_MODES = {"premium_ai", "safe_python"}
+ALLOWED_MODES = {"codex_imagegen", "safe_python", "api_fallback"}
 
 
-def _load_creative_context(project_dir: Path) -> tuple[dict, Path]:
+def _load_context(project_dir: Path) -> tuple[dict, Path]:
     path = project_dir / "00_request" / "normalized" / "creative-context.json"
     if not path.exists():
-        raise SystemExit(
-            "creative-context.json がありません。先に "
-            "python scripts/prepare_creative_context.py --project-id <PJ-XXXX> を実行してください。"
-        )
+        raise SystemExit("creative-context.json がありません。先に prepare_creative_context.py を実行してください。")
     return json.loads(path.read_text(encoding="utf-8-sig")), path
 
 
@@ -46,71 +43,32 @@ def _resolve_size(args: argparse.Namespace, context: dict) -> tuple[int, int, st
     context_width = int(spec.get("width") or 1200)
     context_height = int(spec.get("height") or 628)
     source = str(spec.get("source") or "phase1_default")
-
     if bool(args.width) != bool(args.height):
         raise SystemExit("--width / --height は両方指定するか、両方省略してください。")
     width = int(args.width or context_width)
     height = int(args.height or context_height)
     if width < 256 or height < 256:
         raise SystemExit("width/height must both be at least 256 pixels")
-
     if spec.get("enforce_aspect_ratio"):
         expected_ratio = context_width / context_height
         actual_ratio = width / height
         if abs(expected_ratio - actual_ratio) > 0.01:
             raise SystemExit(
                 "ヒアリング指定の媒体比率と生成サイズが一致しません: "
-                f"expected={spec.get('aspect_ratio')} resolved={context_width}x{context_height}, "
-                f"requested={width}x{height}"
+                f"expected={context_width}x{context_height}, requested={width}x{height}"
             )
     return width, height, source
 
 
 def _resolve_mode(explicit: str) -> str:
-    mode = (explicit or os.getenv("CREATIVE_RENDER_MODE", "premium_ai")).strip().lower()
+    mode = (explicit or os.getenv("CREATIVE_RENDER_MODE", "codex_imagegen")).strip().lower()
     if mode not in ALLOWED_MODES:
-        raise SystemExit(f"unsupported mode={mode!r}; use premium_ai or safe_python")
+        raise SystemExit(f"unsupported mode={mode!r}; use codex_imagegen, safe_python, or api_fallback")
     return mode
 
 
-def _resolve_source(project_dir: Path, creative_id: str, explicit: str, *, mode: str) -> Path:
-    if explicit.strip():
-        path = Path(explicit).expanduser().resolve()
-    elif mode == "premium_ai":
-        path = project_dir / "02_direction" / f"{creative_id}-creative-spec.json"
-    else:
-        path = project_dir / "02_direction" / f"{creative_id}-design-spec.json"
-    if not path.exists():
-        raise SystemExit(f"approved spec not found: {path}")
-    return path
-
-
-def _generator_for_mode(mode: str):
-    previous = os.environ.get("IMAGE_BACKEND")
-    backend = (
-        os.getenv("PREMIUM_IMAGE_BACKEND", "openai")
-        if mode == "premium_ai"
-        else os.getenv("SAFE_IMAGE_BACKEND", os.getenv("IMAGE_BACKEND", "openvino_ovms"))
-    ).strip()
-    os.environ["IMAGE_BACKEND"] = backend
-    try:
-        generator = create_image_generator()
-    finally:
-        if previous is None:
-            os.environ.pop("IMAGE_BACKEND", None)
-        else:
-            os.environ["IMAGE_BACKEND"] = previous
-    return generator, backend
-
-
-def _write_expected_copy_premium(path: Path, spec: dict, *, mode: str, width: int, height: int) -> None:
-    lines = [
-        "# Expected Creative Copy",
-        "",
-        "このファイルはPremium AI画像に入るべき正確な文字列の契約です。",
-        "画像AIの出力文字を正しいものとみなさず、Reviewer/Codexがこの契約と照合します。",
-        "",
-    ]
+def _write_expected_copy_premium(path: Path, spec: dict, *, width: int, height: int) -> None:
+    lines = ["# Expected Creative Copy", "", "Direct API fallback candidate text contract.", ""]
     for block in spec["text_contract"]:
         lines.extend(
             [
@@ -121,21 +79,12 @@ def _write_expected_copy_premium(path: Path, spec: dict, *, mode: str, width: in
                 "",
             ]
         )
-    lines.extend(
-        [
-            "## Technical",
-            f"- mode: {mode}",
-            f"- size: {width}x{height}",
-            f"- benchmark_refs: {', '.join(spec.get('benchmark_refs', [])) or 'none'}",
-            "- text_rendering: integrated_by_image_ai_then_verified",
-            "",
-        ]
-    )
+    lines.extend(["## Technical", "- mode: api_fallback", f"- size: {width}x{height}", ""])
     path.write_text("\n".join(lines), encoding="utf-8-sig")
 
 
-def _write_expected_copy_safe(path: Path, spec: dict, *, mode: str, width: int, height: int) -> None:
-    lines = ["# Expected Creative Copy", "", f"- mode: {mode}", f"- size: {width}x{height}", ""]
+def _write_expected_copy_safe(path: Path, spec: dict, *, width: int, height: int) -> None:
+    lines = ["# Expected Creative Copy", "", "- mode: safe_python", f"- size: {width}x{height}", ""]
     lines.extend(["## Headline", spec["headline"]["text"], ""])
     if spec["subcopy"]["text"]:
         lines.extend(["## Subcopy", spec["subcopy"]["text"], ""])
@@ -145,23 +94,38 @@ def _write_expected_copy_safe(path: Path, spec: dict, *, mode: str, width: int, 
         lines.append("")
     if spec["cta"]["text"]:
         lines.extend(["## CTA", spec["cta"]["text"], ""])
-    lines.append("- text_rendering: deterministic_python_design_spec")
     path.write_text("\n".join(lines), encoding="utf-8-sig")
 
 
-def _generate_premium(
-    *,
-    project_dir: Path,
-    source: Path,
-    batch_dir: Path,
-    candidate: Path,
-    prompt_path: Path,
-    expected_copy: Path,
-    width: int,
-    height: int,
-    context_path: Path,
-    output_spec_source: str,
-) -> tuple[str, dict, dict]:
+def _generator_for_backend(backend: str):
+    previous = os.environ.get("IMAGE_BACKEND")
+    os.environ["IMAGE_BACKEND"] = backend
+    try:
+        return create_image_generator()
+    finally:
+        if previous is None:
+            os.environ.pop("IMAGE_BACKEND", None)
+        else:
+            os.environ["IMAGE_BACKEND"] = previous
+
+
+def _run_api_fallback(
+    *, project_dir: Path, creative_id: str, version: str, spec_file: str,
+    width: int, height: int, context_path: Path, output_spec_source: str,
+) -> dict:
+    if os.getenv("API_FALLBACK_ENABLED", "false").strip().lower() != "true":
+        raise SystemExit(
+            "API fallback is disabled. v5 standard generation is Codex ImageGen. "
+            "Enable API_FALLBACK_ENABLED=true only after explicit user approval."
+        )
+    if not os.getenv("OPENAI_API_KEY", "").strip():
+        raise SystemExit("OPENAI_API_KEY is required only for explicit api_fallback mode")
+    if not os.getenv("OPENAI_IMAGE_MODEL", "").strip():
+        raise SystemExit("OPENAI_IMAGE_MODEL is required only for explicit api_fallback mode")
+
+    source = Path(spec_file).expanduser().resolve() if spec_file.strip() else (
+        project_dir / "02_direction" / f"{creative_id}-creative-spec.json"
+    )
     try:
         spec = load_creative_spec(
             source,
@@ -171,93 +135,103 @@ def _generate_premium(
     except CreativeSpecError as exc:
         raise SystemExit(f"Creative Spec validation failed: {exc}") from exc
 
+    batch_dir = project_dir / "03_batches" / creative_id / version
+    review_dir = project_dir / "04_project_review"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    review_dir.mkdir(parents=True, exist_ok=True)
+    candidate = batch_dir / "candidate.png"
+    prompt_path = batch_dir / "image-prompt.txt"
+    expected_copy = batch_dir / "expected-copy.md"
     snapshot = batch_dir / "creative-spec.json"
     write_creative_spec(snapshot, spec)
+
     prompt = build_integrated_image_prompt(spec, width=width, height=height)
-    negative_prompt = spec["image"].get("negative_prompt", "")
     prompt_path.write_text(
-        "# Premium Integrated Image Prompt\n\n"
-        + prompt
-        + "\n\n# Context\n\n"
-        + f"creative_context: {context_path}\n"
-        + f"creative_spec: {snapshot}\n"
-        + f"resolved_size: {width}x{height}\n"
-        + f"output_spec_source: {output_spec_source}\n",
+        "# EXPLICIT API FALLBACK\n\n" + prompt + "\n\n"
+        + f"creative_context: {context_path}\noutput_spec_source: {output_spec_source}\n",
         encoding="utf-8-sig",
     )
-
-    generator, backend = _generator_for_mode("premium_ai")
+    backend = os.getenv("API_FALLBACK_IMAGE_BACKEND", "openai").strip()
+    generator = _generator_for_backend(backend)
     generator.generate(
         prompt=prompt,
-        negative_prompt=negative_prompt,
+        negative_prompt=spec["image"].get("negative_prompt", ""),
         width=width,
         height=height,
         output_path=candidate,
     )
-    _write_expected_copy_premium(expected_copy, spec, mode="premium_ai", width=width, height=height)
-
+    _write_expected_copy_premium(expected_copy, spec, width=width, height=height)
     report = verify_image_text(spec, candidate)
-    report.update({"mode": "premium_ai", "backend": backend, "candidate": str(candidate)})
-    return backend, spec, report
+    report.update({"mode": "api_fallback", "backend": backend, "candidate": str(candidate)})
+    verification = review_dir / f"{creative_id}-{version}-text-verification.json"
+    write_verification(verification, report)
+    return {
+        "mode": "api_fallback",
+        "backend": backend,
+        "candidate": str(candidate),
+        "verification": str(verification),
+        "formal_delivery": False,
+    }
 
 
-def _generate_safe(
-    *,
-    source: Path,
-    batch_dir: Path,
-    candidate: Path,
-    prompt_path: Path,
-    expected_copy: Path,
-    width: int,
-    height: int,
-    context_path: Path,
-    output_spec_source: str,
-) -> tuple[str, dict, dict]:
+def _run_safe(
+    *, project_dir: Path, creative_id: str, version: str, spec_file: str,
+    width: int, height: int,
+) -> dict:
+    source = Path(spec_file).expanduser().resolve() if spec_file.strip() else (
+        project_dir / "02_direction" / f"{creative_id}-design-spec.json"
+    )
     try:
         spec = load_design_spec(source, fact_max=int(os.getenv("FACT_CHIP_MAX", "3")))
     except DesignSpecError as exc:
         raise SystemExit(f"Design Spec validation failed: {exc}") from exc
 
+    batch_dir = project_dir / "03_batches" / creative_id / version
+    review_dir = project_dir / "04_project_review"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    review_dir.mkdir(parents=True, exist_ok=True)
+    candidate = batch_dir / "candidate.png"
+    background = batch_dir / "background.png"
+    expected_copy = batch_dir / "expected-copy.md"
     snapshot = batch_dir / "design-spec.json"
     write_design_spec(snapshot, spec)
-    background = batch_dir / "background.png"
-    prompt = (
-        spec["image"]["prompt"].strip()
-        + "\n\nDo not render any letters, words, captions, logos, watermarks, numbers, or readable text. "
-        + f"Keep typography-safe space on the {spec['text_zone']} side."
-    )
-    negative = spec["image"].get("negative_prompt", "").strip()
-    negative = f"{negative}, text, letters, words, watermark" if negative else "text, letters, words, watermark"
-    prompt_path.write_text(
-        "# Safe Background Prompt\n\n"
-        + prompt
-        + "\n\n# Context\n\n"
-        + f"creative_context: {context_path}\n"
-        + f"design_spec: {snapshot}\n"
-        + f"resolved_size: {width}x{height}\n"
-        + f"output_spec_source: {output_spec_source}\n",
-        encoding="utf-8-sig",
-    )
 
-    generator, backend = _generator_for_mode("safe_python")
-    generator.generate(prompt=prompt, negative_prompt=negative, width=width, height=height, output_path=background)
+    prompt = spec["image"]["prompt"].strip() + "\nDo not render readable text."
+    backend = os.getenv("SAFE_IMAGE_BACKEND", "openvino_ovms").strip()
+    generator = _generator_for_backend(backend)
+    generator.generate(
+        prompt=prompt,
+        negative_prompt="text, letters, words, watermark",
+        width=width,
+        height=height,
+        output_path=background,
+    )
     render_design_spec(background, spec, output_path=candidate)
-    _write_expected_copy_safe(expected_copy, spec, mode="safe_python", width=width, height=height)
+    _write_expected_copy_safe(expected_copy, spec, width=width, height=height)
     report = {
         "status": "pass",
         "verification_source": "deterministic_python_rendering",
         "mode": "safe_python",
-        "backend": backend,
-        "candidate": str(candidate),
         "required_text_pass": True,
         "numeric_fact_pass": True,
     }
-    return backend, spec, report
+    verification = review_dir / f"{creative_id}-{version}-text-verification.json"
+    write_verification(verification, report)
+    return {
+        "mode": "safe_python",
+        "backend": backend,
+        "candidate": str(candidate),
+        "verification": str(verification),
+        "formal_delivery": False,
+    }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate a review candidate. Premium AI is default; formal delivery requires later promotion after QA."
+        description=(
+            "v5 fallback generation utility. Standard codex_imagegen production is performed directly by "
+            "Codex Integrated Creative Designer, then registered with register_codex_candidate.py."
+        )
     )
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--creative-id", default="CR001")
@@ -272,74 +246,56 @@ def main() -> None:
         raise SystemExit("creative-id/version must use only letters, numbers, hyphen, underscore")
 
     mode = _resolve_mode(args.mode)
+    if mode == "codex_imagegen":
+        raise SystemExit(
+            "v5 primary generation is owned by Codex Integrated Creative Designer + ImageGen, not Python.\n"
+            "Generate candidate.png with Codex ImageGen, then run:\n"
+            "python scripts/register_codex_candidate.py --project-id <PJ-XXXX> --creative-id <CR001> --version <v001>"
+        )
+
     projects_root = load_environment()
     project_dir = resolve_project_dir(projects_root, args.project_id)
     if not (project_dir / "project.yaml").exists():
         raise SystemExit(f"project is incomplete: {project_dir}")
-
-    context, context_path = _load_creative_context(project_dir)
+    context, context_path = _load_context(project_dir)
     width, height, output_spec_source = _resolve_size(args, context)
-    source = _resolve_source(project_dir, args.creative_id, args.spec_file, mode=mode)
 
-    batch_dir = project_dir / "03_batches" / args.creative_id / args.version
-    review_dir = project_dir / "04_project_review"
-    batch_dir.mkdir(parents=True, exist_ok=True)
-    review_dir.mkdir(parents=True, exist_ok=True)
-    candidate = batch_dir / "candidate.png"
-    prompt_path = batch_dir / "image-prompt.txt"
-    expected_copy = batch_dir / "expected-copy.md"
-    verification_path = review_dir / f"{args.creative_id}-{args.version}-text-verification.json"
-
-    if mode == "premium_ai":
-        backend, _spec, report = _generate_premium(
+    if mode == "api_fallback":
+        result = _run_api_fallback(
             project_dir=project_dir,
-            source=source,
-            batch_dir=batch_dir,
-            candidate=candidate,
-            prompt_path=prompt_path,
-            expected_copy=expected_copy,
+            creative_id=args.creative_id,
+            version=args.version,
+            spec_file=args.spec_file,
             width=width,
             height=height,
             context_path=context_path,
             output_spec_source=output_spec_source,
         )
     else:
-        backend, _spec, report = _generate_safe(
-            source=source,
-            batch_dir=batch_dir,
-            candidate=candidate,
-            prompt_path=prompt_path,
-            expected_copy=expected_copy,
+        result = _run_safe(
+            project_dir=project_dir,
+            creative_id=args.creative_id,
+            version=args.version,
+            spec_file=args.spec_file,
             width=width,
             height=height,
-            context_path=context_path,
-            output_spec_source=output_spec_source,
         )
 
-    write_verification(verification_path, report)
+    batch_dir = project_dir / "03_batches" / args.creative_id / args.version
     metadata = {
         "project_id": args.project_id,
         "creative_id": args.creative_id,
         "version": args.version,
-        "mode": mode,
-        "backend": backend,
-        "size": f"{width}x{height}",
-        "source_spec": str(source),
-        "candidate": str(candidate),
-        "expected_copy": str(expected_copy),
-        "verification": str(verification_path),
-        "formal_delivery": False,
+        **result,
         "next_gate": "creative_reviewer_then_codex_final_qa",
     }
     (batch_dir / "generation-metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8-sig"
     )
-
-    print("CREATIVE CANDIDATE GENERATION: PASS")
+    print("FALLBACK CREATIVE CANDIDATE GENERATION: PASS")
     for key, value in metadata.items():
         print(f"{key.upper()}={value}")
-    print(f"TEXT_VERIFICATION_STATUS={report.get('status')}")
-    print("NOTE=Candidate is NOT formal delivery until promote_creative.py receives explicit QA approval.")
+    print("NOTE=Standard v5 generation remains Codex ImageGen; this command used an explicit fallback mode.")
 
 
 if __name__ == "__main__":
