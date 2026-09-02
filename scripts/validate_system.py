@@ -16,18 +16,12 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.image_generator import check_image_backend
 
 
-REQUIRED_AGENTS = [
-    "recruitment_analyst",
-    "creative_director",
-    "creative_reviewer",
-]
-
+REQUIRED_AGENTS = ["recruitment_analyst", "creative_director", "creative_reviewer"]
 EXPECTED_WORKFLOW = [
     "intake",
     "context_preparation",
@@ -35,8 +29,12 @@ EXPECTED_WORKFLOW = [
     "codex_fact_check",
     "codex_benchmark_gate",
     "creative_direction",
-    "codex_direction_approval",
+    "codex_design_spec_approval",
+    "design_spec_save",
+    "design_spec_preview",
+    "codex_preview_approval",
     "image_generation",
+    "design_spec_rendering",
     "creative_review",
     "codex_final_qa",
 ]
@@ -80,9 +78,10 @@ def _run_version(command: str) -> tuple[bool, str]:
 def validate_structure(errors: list[str], messages: list[str]) -> None:
     agents_path = REPO_ROOT / "configs" / "agents.yaml"
     workflow_path = REPO_ROOT / "configs" / "workflow.yaml"
-    media_path = REPO_ROOT / "configs" / "media.yaml"
+    layouts_path = REPO_ROOT / "configs" / "layouts.yaml"
     agents = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+    layouts = yaml.safe_load(layouts_path.read_text(encoding="utf-8")) if layouts_path.exists() else {}
 
     chief = agents.get("chief", {}).get("codex_cco", {})
     cco_path = REPO_ROOT / str(chief.get("file") or "")
@@ -112,28 +111,40 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         if previous in positions and following in positions and positions[previous] >= positions[following]:
             errors.append(f"Workflow order invalid: {previous} must precede {following}")
 
-    if not (REPO_ROOT / "scripts" / "run_production.py").exists():
-        errors.append("Deprecated run_production shim is missing")
-
-    required_python_utilities = [
+    required_files = [
         "scripts/create_project_from_intake.py",
         "scripts/input_loader.py",
         "scripts/prepare_creative_context.py",
+        "scripts/preview_design_spec.py",
+        "scripts/test_design_renderer.py",
         "scripts/generate_creative.py",
+        "services/design_spec.py",
         "services/image_generator.py",
         "services/overlay_renderer.py",
         "configs/media.yaml",
+        "configs/layouts.yaml",
     ]
-    for relative in required_python_utilities:
+    for relative in required_files:
         if not (REPO_ROOT / relative).exists():
             errors.append(f"Missing Phase 1 utility: {relative}")
 
-    if not media_path.exists():
-        errors.append("Missing hearing-aware media configuration: configs/media.yaml")
+    families = set((layouts or {}).get("layout_families", {}).keys())
+    required_families = {
+        "numeric_impact",
+        "short_power_word",
+        "concept_message",
+        "work_scene",
+        "benefit_stack",
+        "emotional_message",
+    }
+    if families != required_families:
+        errors.append(f"Layout family set mismatch: {sorted(families)}")
 
     create_project_text = (REPO_ROOT / "scripts" / "create_project_from_intake.py").read_text(encoding="utf-8")
     prepare_context_text = (REPO_ROOT / "scripts" / "prepare_creative_context.py").read_text(encoding="utf-8")
+    preview_text = (REPO_ROOT / "scripts" / "preview_design_spec.py").read_text(encoding="utf-8")
     generate_text = (REPO_ROOT / "scripts" / "generate_creative.py").read_text(encoding="utf-8")
+    design_spec_text = (REPO_ROOT / "services" / "design_spec.py").read_text(encoding="utf-8")
     overlay_text = (REPO_ROOT / "services" / "overlay_renderer.py").read_text(encoding="utf-8")
     env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
 
@@ -145,34 +156,38 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         errors.append("Creative context preparation must index the original_image benchmark library")
     if "creative-context.json" not in generate_text:
         errors.append("Creative generation must require the prepared compact context")
-    if '"--project-id"' not in generate_text or "required=True" not in generate_text:
-        errors.append("Creative generation must require --project-id")
-    if 'project_dir / "05_delivery"' not in generate_text:
-        errors.append("Creative generation must save final output inside 05_delivery")
-    if 'project_dir / "03_batches"' not in generate_text:
-        errors.append("Creative generation must save generation artifacts inside 03_batches")
-    if "benchmark_recruit" not in overlay_text:
-        errors.append("Recruitment typography renderer must provide benchmark_recruit style")
-    if "ORIGINAL_IMAGE_ROOT=" not in env_example:
-        errors.append(".env.example must define ORIGINAL_IMAGE_ROOT")
-    if "REFERENCE_SHORTLIST_MAX=" not in env_example:
-        errors.append(".env.example must define token-efficient benchmark shortlist settings")
+    if "load_design_spec" not in preview_text or "render_design_spec" not in preview_text:
+        errors.append("Design Spec preview must validate and render before image generation")
+    if "design-spec.json" not in generate_text or "load_design_spec" not in generate_text:
+        errors.append("Creative generation must load and snapshot an approved Design Spec")
+    if "render_design_spec" not in generate_text:
+        errors.append("Creative generation must use Design Spec rendering")
+    if "ALLOWED_LAYOUT_FAMILIES" not in design_spec_text:
+        errors.append("Design Spec contract must validate layout families")
+    if "render_design_spec" not in overlay_text:
+        errors.append("Renderer must expose render_design_spec")
+    for family in required_families:
+        if family not in overlay_text:
+            errors.append(f"Renderer missing layout family implementation: {family}")
+    if "DESIGN_SPEC_REQUIRED=true" not in env_example:
+        errors.append(".env.example must require Design Spec mode")
 
-    messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + Python file/image utilities")
+    messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + AI Design Spec + Python renderer")
     messages.append("Minimum intake: job file required; hearing/text optional")
     messages.append("Compact context: REQUIRED before Claude/image generation")
     messages.append("Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3")
     messages.append("Hearing quantity/media: overrides generic Phase 1 defaults")
-    messages.append("Project-scoped generation: REQUIRED before any final image")
+    messages.append("Design Spec: REQUIRED before formal rendering")
+    messages.append("Zero-cost typography preview: REQUIRED before image generation")
+    messages.append("Layout families: numeric / short-word / concept / work-scene / benefit-stack / emotional")
+    messages.append("Text: exact Japanese rendering; semantic line breaks owned by Creative Director")
     messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
-    messages.append("Typography: benchmark_recruit default + deterministic Japanese overlay")
 
 
 def _benchmark_root() -> tuple[Path | None, str]:
     configured = os.getenv("ORIGINAL_IMAGE_ROOT", "").strip()
     if configured:
         return Path(configured), "ORIGINAL_IMAGE_ROOT"
-
     projects_root = os.getenv("PROJECTS_ROOT", "").strip()
     if projects_root:
         return Path(projects_root).parent / "original_image", "derived_from_PROJECTS_ROOT"
@@ -185,11 +200,9 @@ def validate_benchmark_runtime(errors: list[str], messages: list[str]) -> None:
         if os.getenv("BENCHMARK_REFERENCE_REQUIRED", "true").lower() == "true":
             errors.append("Benchmark root cannot be resolved. Set ORIGINAL_IMAGE_ROOT or PROJECTS_ROOT.")
         return
-
     if not root.exists():
         errors.append(f"Benchmark root does not exist: {root} (source={source})")
         return
-
     extensions = {".png", ".jpg", ".jpeg", ".webp"}
     count = sum(1 for path in root.rglob("*") if path.is_file() and path.suffix.lower() in extensions)
     messages.append(f"Benchmark library: OK ({root}, images={count}, source={source})")
@@ -198,20 +211,15 @@ def validate_benchmark_runtime(errors: list[str], messages: list[str]) -> None:
 
 
 def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
-    claude_command = os.getenv("CLAUDE_CLI_COMMAND", "claude")
-    codex_command = os.getenv("CODEX_CLI_COMMAND", "codex")
-
-    ok, detail = _run_version(claude_command)
-    if ok:
-        messages.append(f"Claude Code CLI: OK ({detail})")
-    else:
-        errors.append(f"Claude Code CLI unavailable: {detail}")
-
-    ok, detail = _run_version(codex_command)
-    if ok:
-        messages.append(f"Codex CLI: OK ({detail})")
-    else:
-        errors.append(f"Codex CLI unavailable: {detail}")
+    for label, command in (
+        ("Claude Code", os.getenv("CLAUDE_CLI_COMMAND", "claude")),
+        ("Codex", os.getenv("CODEX_CLI_COMMAND", "codex")),
+    ):
+        ok, detail = _run_version(command)
+        if ok:
+            messages.append(f"{label} CLI: OK ({detail})")
+        else:
+            errors.append(f"{label} CLI unavailable: {detail}")
 
 
 def verify_logins(errors: list[str], messages: list[str]) -> None:
@@ -222,10 +230,7 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
         return
 
     claude = subprocess.run(
-        _windows_safe(
-            claude_exe,
-            ["-p", "--output-format", "json", "--max-turns", "1", "Return exactly OK."],
-        ),
+        _windows_safe(claude_exe, ["-p", "--output-format", "json", "--max-turns", "1", "Return exactly OK."]),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -244,18 +249,7 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="jobole_login_") as tmpdir:
         output_path = Path(tmpdir) / "codex.txt"
         codex = subprocess.run(
-            _windows_safe(
-                codex_exe,
-                [
-                    "exec",
-                    "--ephemeral",
-                    "--sandbox",
-                    "read-only",
-                    "--output-last-message",
-                    str(output_path),
-                    "-",
-                ],
-            ),
+            _windows_safe(codex_exe, ["exec", "--ephemeral", "--sandbox", "read-only", "--output-last-message", str(output_path), "-"]),
             input="Return exactly OK.",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -274,7 +268,7 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate the benchmark-aware Phase 1 architecture.")
+    parser = argparse.ArgumentParser(description="Validate the Design Spec driven Phase 1 architecture.")
     parser.add_argument("--runtime-config", action="store_true")
     parser.add_argument("--verify-login", action="store_true")
     parser.add_argument("--verify-image", action="store_true")

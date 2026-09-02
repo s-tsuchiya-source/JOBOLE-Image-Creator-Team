@@ -7,8 +7,8 @@ quality:
   fact_error_forces_revision: true
   hearing_violation_forces_revision: true
   benchmark_mismatch_forces_revision: true
+  design_spec_mismatch_forces_revision: true
   require_traceability: true
-  require_schema_validation: false
   require_compact_json_contract: true
 
   benchmark:
@@ -16,6 +16,17 @@ quality:
     shortlist_max: 3
     selection_owner: codex_cco
     python_may_auto_select: false
+
+  design_spec:
+    required_before_rendering: true
+    layout_config: configs/layouts.yaml
+    semantic_line_breaks_required: true
+    emphasis_must_exist_in_headline: true
+    fact_max: 3
+    benchmark_ref_max: 3
+    image_prompt_required: true
+    image_model_required_text: false
+    multiple_creatives_same_layout_requires_reason: true
 
   competition:
     message_axis_candidate_min: 3
@@ -30,6 +41,8 @@ quality:
     - unsupported_claim
     - hearing_media_mismatch
     - benchmark_quality_mismatch
+    - design_spec_fidelity_mismatch
+    - mechanical_template_repetition
     - unreadable_or_inaccurate_text
     - major_generation_artifact
 
@@ -37,6 +50,7 @@ quality:
     compact_context_first: true
     raw_source_fallback_only: true
     compact_json_outputs: true
+    reuse_design_spec_downstream: true
     root_cause_revision_only: true
     rerun_all_agents: false
 

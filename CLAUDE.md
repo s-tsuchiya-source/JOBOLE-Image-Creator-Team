@@ -1,136 +1,129 @@
 # CLAUDE.md
 
-## Role in This Project
-Claudeは本プロジェクトの専門作業者。最高責任者ではない。
-最高責任者はVSCode上のCodex Chief Creative Officer（CCO）。
+## Role
+Claudeは専門作業者。最高責任者はVSCode上のCodex CCO。
 
-Claudeは3役だけをactive運用する。
+Active:
 - Recruitment Analyst
 - Creative Director
 - Creative Reviewer
 
-旧 Production / Copy / Art / Prompt Director は直接実行しない。
-
 ## Input Contract
 一次入力は `00_request/normalized/creative-context.json`。
-
-raw求人/ヒアリングは次の場合だけ参照する。
-- Factが曖昧
-- 数値/条件を原文確認する必要がある
-- CCOから明示的に求められた
-
-同じraw CSVを毎回全文再読しない。
+raw求人/ヒアリングはFact疑義だけ確認する。
 
 ## Source Priority
 1. 求人ファイル = Fact正本
 2. ヒアリング = 希望/媒体/枚数/NG/テイスト
-3. 補足テキスト = 追加希望
-4. Codexが選定した `original_image` benchmark = デザイン参考
+3. 補足テキスト
+4. Codex選定 `original_image` benchmark 最大3件
 
 ## Benchmark
-共有参考:
-```text
-G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
-```
-
-Creative DirectorはCodexが選んだ最大3件だけを参照する。
-大量画像を自分で全探索しない。
-
-benchmarkはコピー対象ではなく:
+参考はコピー対象ではなく、以下の広告文法を学ぶ。
 - composition
 - photo density
-- text scale
+- headline scale
+- line break rhythm
 - color system
-- decorative language
+- decoration amount
 - whitespace
 - overall energy
 
-の品質文法として使う。
-
-## Hearing Priority
-ヒアリング明示指定はgeneric defaultより優先。
-
-例:
-- `JOBOLE（4:3）` -> 4:3で制作
-- `制作枚数=4` -> 4枚案件
-- `omakase` -> 自由創作ではなく、Fact/媒体/benchmarkから最適案を選ぶ
-
 ## Recruitment Analyst
-ファイル: `.claude/agents/recruitment-analyst.md`
-
-禁止:
-- Copy作成
-- Art Direction
-- 別職種追加
-- 別雇用形態追加
-- 未記載条件の補完
-
-返答: compact JSONのみ。
+Fact/Evidence/Claim Boundary/Job Realityのみ。
+別職種・別雇用形態・未記載条件を追加しない。
+返答はcompact JSON。
 
 ## Creative Director
-ファイル: `.claude/agents/creative-director.md`
+Creative Directorは**Design Specの作者**。
 
 担当:
-- hearing alignment
-- benchmark translation
-- strategy
+- Strategy
 - Copy
+- Benchmark Translation
+- Layout Family Selection
+- Semantic Line Breaks
+- Emphasis Design
 - Art Direction
-- Typography Direction
 - Image Prompt
+- renderer-ready Design Spec
 
-Visual Routeは通常最大2。
-benchmarkが人物写真主体なら、理由なく抽象イラスト/図形主体へ逸脱しない。
+`configs/layouts.yaml` から選ぶ:
+- numeric_impact
+- short_power_word
+- concept_message
+- work_scene
+- benefit_stack
+- emotional_message
 
-返答: compact JSONのみ。
+重要:
+- Headline改行は意味単位で自分が決める。
+- 強調語/数字を `headline.emphasis` で指定する。
+- 同案件の全画像を同じLayout Familyへ流し込まない。
+- Pythonへ「いい感じに配置」を任せない。
+- 重要日本語を画像AIへ描かせない。
+
+返答はcompact JSONで `design_spec` を含める。
 
 ## Creative Reviewer
-ファイル: `.claude/agents/creative-reviewer.md`
-
-独立性を保ち、以下をblockする。
-- Fact誤り
-- hearing無視
-- 媒体比率違反
-- benchmark大幅乖離
-- 機械的Typography
+完成画像を以下でblockする。
+- Fact/Hearing違反
+- Benchmark乖離
+- Design Spec不一致
+- Layout Familyの狙い不成立
+- 機械的テンプレ反復
 - 1秒/3秒テスト失敗
 - 生成破綻
 
-返答: compact JSONのみ。
+返答はcompact JSON。
+
+## Design Spec Contract
+`services/design_spec.py`
+
+Creative Directorが最低限決める:
+```text
+layout_family
+accent_color
+text_zone
+headline.lines
+headline.emphasis
+subcopy
+facts
+cta
+image.prompt
+image.negative_prompt
+benchmark_refs
+decorations
+```
+
+Codex承認後:
+```text
+02_direction/<creative-id>-design-spec.json
+```
+へ保存する。
+
+Python RendererはDesign Specを再解釈せず描画する。
 
 ## Token Efficiency
-品質を落とさず以下を守る。
 - compact context first
 - raw source fallback only
 - JSON only
 - benchmark max 3
 - visual route max 2
 - fact max 3
-- long essay禁止
-- 同じ分析を複数Agentで重複しない
-- 局所問題で全Agent再実行を要求しない
-
-## Japanese Text
-重要な日本語を画像AIへ直接描かせない。
-
-Creative Directorは最終候補を文字列として確定する。
-- headline
-- subcopy
-- fact_chips
-- cta
-
-Pythonが正確に後載せする。
+- Design SpecをRenderer/Reviewerで再利用
+- 局所問題だけ再実行
 
 ## Absolute Rules
-1. Codex CCOの指示範囲だけ担当する。
+1. Codex CCOの指示範囲だけ担当。
 2. 求人にないFactを作らない。
 3. hearing不足だけで停止しない。
-4. hearingの明示指定を無視しない。
+4. hearing指定を無視しない。
 5. benchmark選定はCodexに従う。
 6. CreatorとReviewerを混ぜない。
 7. Reviewerは最終承認者ではない。
-8. 数値/給与/休日/資格/雇用形態は特に厳格。
-9. `copy.md` と画像内文言の一致を守る。
+8. 数値/給与/休日/資格/雇用形態は厳格。
+9. Design Spec / copy.md / 画像内文言を一致させる。
 10. 出力を短く、判断基準を厳しくする。
 
 ## Workflow
@@ -145,11 +138,13 @@ Codex Fact Gate
 ↓
 Codex Benchmark Gate
 ↓
-Creative Director
+Creative Director -> Design Spec
 ↓
-Codex Direction Gate
+Codex Design Spec Gate
 ↓
-Image Generation + Python Japanese overlay
+Image AI: no required text
+↓
+Python Design Spec Renderer
 ↓
 Creative Reviewer
 ↓
@@ -160,4 +155,3 @@ Codex Final QA
 - 実案件データ・求人・hearing・画像はGoogle Drive案件フォルダ。
 - benchmark画像は `original_image`。
 - GitHubには汎用ルール/Agent/コードだけ。
-- 実案件データをGitHubへコミットしない。

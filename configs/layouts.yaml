@@ -1,0 +1,86 @@
+version: 1
+
+layout_families:
+  numeric_impact:
+    purpose: 給与・時給・徒歩分数・休日数・残業時間など、数字自体が強い求人向け
+    headline_lines_max: 3
+    fact_max: 2
+    default_text_zone: left
+    headline_scale: xxl
+    emphasize_numbers: true
+    recommended_for:
+      - salary
+      - hourly_wage
+      - access_minutes
+      - annual_holidays
+      - overtime_hours
+
+  short_power_word:
+    purpose: ブランクOK・未経験OK・土日休み等の短い強訴求を一撃で見せる
+    headline_lines_max: 2
+    fact_max: 2
+    default_text_zone: left
+    headline_scale: xxl
+    emphasize_numbers: false
+    recommended_for:
+      - barrier_reduction
+      - holiday
+      - qualification
+
+  concept_message:
+    purpose: スポーツ×福祉、IT×教育等の仕事の特徴・世界観を魅力として見せる
+    headline_lines_max: 3
+    fact_max: 2
+    default_text_zone: left
+    headline_scale: xl
+    emphasize_numbers: false
+    recommended_for:
+      - mission
+      - unique_work_style
+      - category_concept
+
+  work_scene:
+    purpose: 仕事内容そのものの魅力や職場のリアリティを写真主体で見せる
+    headline_lines_max: 2
+    fact_max: 2
+    default_text_zone: left
+    headline_scale: large
+    emphasize_numbers: false
+    recommended_for:
+      - job_reality
+      - work_environment
+      - people
+
+  benefit_stack:
+    purpose: 強い条件が複数あり、1つのHeadlineと2〜3個のメリットを整理して見せる
+    headline_lines_max: 2
+    fact_max: 3
+    default_text_zone: left
+    headline_scale: xl
+    emphasize_numbers: false
+    recommended_for:
+      - multiple_benefits
+      - benefits
+      - access_and_holiday
+
+  emotional_message:
+    purpose: やりがい・社会的意義・人の成長などを柔らかく見せる
+    headline_lines_max: 3
+    fact_max: 1
+    default_text_zone: left
+    headline_scale: xl
+    emphasize_numbers: false
+    recommended_for:
+      - mission
+      - care
+      - education
+      - welfare
+
+rules:
+  exact_text_rendering: true
+  image_model_renders_required_text: false
+  manual_line_breaks_preferred: true
+  auto_wrap_is_fallback_only: true
+  max_layout_candidates: 2
+  do_not_repeat_same_family_across_all_creatives: true
+  fact_chip_max: 3
