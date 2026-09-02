@@ -1,13 +1,13 @@
 # AGENTS.md
 
 ## Goal
-求人ファイルだけでも、**案件作成 → Fact確認 → benchmark選定 → Design Spec作成 → 無料Typography Preview → 文字なし画像生成 → Python高品質Typography → Review → Drive保存**まで進める。
+求人ファイルだけでも、**Project → Fact → Benchmark → Premium Creative Spec → 文字込み完成広告Candidate → Text/Creative Review → Formal Delivery**まで進める。
 
-Phase 1 v3ではAgent数を増やさず、Codex CCO + Claude 3専門家 + Design Spec Rendererで品質を上げる。
+標準はPremium Integrated AI。Safe Python Typographyはfallback。
 
 ## User Intake
 必須:
-- 求人ファイル 1つ以上
+- 求人ファイル
 
 任意:
 - ヒアリングシート
@@ -17,243 +17,208 @@ Phase 1 v3ではAgent数を増やさず、Codex CCO + Claude 3専門家 + Design
 1. 求人ファイル = Fact正本
 2. ヒアリング = 希望/媒体/枚数/NG/テイスト
 3. 補足テキスト
-4. `ORIGINAL_IMAGE_ROOT` = デザインbenchmark
+4. `ORIGINAL_IMAGE_ROOT` = design benchmark
 
 ## Project First
+最初に案件を作る。
+
 ```powershell
 python scripts/create_project_from_intake.py --job-posting "<求人>" --hearing "<optional>"
 ```
 
-標準保存先:
+正式保存先:
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ```
 
-正式成果物をDesktop/repo/tmpへ代替保存しない。
-
-## Compact Context Before Claude
+## Compact Context
 ```powershell
 python scripts/prepare_creative_context.py --project-id PJ-XXXX
 ```
 
-`creative-context.json` を一次入力にする。raw CSVはFact疑義のみ。
+`creative-context.json` を一次入力にする。raw sourceはFact疑義だけ。
 
-## Benchmark Library
+## Benchmark
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
 ```
 
-Pythonはcatalog/contact sheetだけ作り、Codex CCOが最大3件を選ぶ。
+Pythonはcatalog/contact sheet。Codex CCOが最大3件を選ぶ。
 
-## Hearing Priority
-ヒアリング指定はgeneric defaultより優先。
-
-例:
-```text
-JOBOLE（4:3） -> 1200x900 / 4:3
-```
-
-## AI Organization
+## Active AI Organization
 ### Codex CCO
+最高責任者。
+- Project Gate
 - Fact Gate
 - Benchmark Gate
-- Design Spec Gate
-- Typography Preview Gate
-- Layout Familyの使い分け
-- Revision Routing
+- Premium Creative Spec Gate
+- Text Integrity Gate
+- Safe fallback decision
 - Final QA
+- Formal delivery approval
 
 ### Recruitment Analyst
-- exact role/employment type
-- Fact/Evidence
-- Advertising Leverage
+- exact Fact/Evidence
 - Claim Boundary
+- Advertising Leverage
+- verbatim claims
+- critical numeric facts
 - Job Reality
 
 ### Creative Director
-- message strategy
-- Copy
-- benchmark translation
-- Art Direction
-- Layout Family選択
-- 意味改行
-- 強調語/数字
-- Image Prompt
-- renderer-ready Design Spec
+- Strategy/Copy
+- Benchmark Translation
+- Art/Photo Direction
+- Integrated Typography Direction
+- Exact Text Contract
+- Premium Image Prompt
 
 ### Creative Reviewer
 - Fact/Hearing/Benchmark
-- Design Spec fidelity
-- Layout Family品質
-- 1-second / 3-second test
-- Typography
-- Job Reality
-- Generation Artifact
+- image visual text readback
+- OCR assessment
+- Copy/Visual/Typography
+- Job Reality/Generation Quality
+- delivery blocker
 
-## Design Spec First
+## Premium Mode
+Default:
+```env
+CREATIVE_RENDER_MODE=premium_ai
+PREMIUM_IMAGE_BACKEND=openai
+```
+
+Creative Director outputs:
 ```text
-Creative Director
-↓
-Codex Approval
-↓
-02_direction/CR001-design-spec.json
-↓
-Python Preview
-↓
-Codex Preview Approval
-↓
-Image AI = 文字なし背景
-↓
-Python = Design Spec通りの日本語描画
+02_direction/<creative-id>-creative-spec.json
 ```
 
-Pythonへデザイン判断を委譲しない。
+Premium image AI generates:
+- photo
+- background
+- decoration
+- Japanese typography
+- exact contracted copy
 
-## Layout Families
-`configs/layouts.yaml`
+Python does NOT overlay text in Premium Mode.
 
-- numeric_impact
-- short_power_word
-- concept_message
-- work_scene
-- benefit_stack
-- emotional_message
+## Exact Text Contract
+Each required block has:
+- id
+- role
+- exact text
+- required
+- fact_ids
+- line-break flexibility
+- priority
 
-複数枚案件で全て同じFamilyへ流し込まない。
+Image AI may change visual line breaks only when permitted; characters, digits, punctuation and meaning must stay exact.
 
-## Design Spec Contract
-`services/design_spec.py`
-
-必須:
-- layout_family
-- accent_color
-- text_zone
-- headline.lines
-- headline.emphasis
-- image.prompt
-
-任意:
-- subcopy
-- facts 最大3
-- CTA
-- benchmark_refs 最大3
-- decorations
-
-Headlineの意味改行はCreative Directorが決める。Python自動折返しは最終fallbackのみ。
-
-## Preview Before Image Cost
-```powershell
-python scripts/preview_design_spec.py --project-id PJ-XXXX --creative-id CR001
-```
-
-確認:
-- 意味改行
-- 強調語/数字
-- Layout Family
-- Fact/CTA密度
-- 余白
-- テンプレ感
-
-Previewで直せる問題のために画像AIを再生成しない。
-
-## Fixed Workflow
-```text
-Human
-↓
-Codex CCO
-↓
-Project creation
-↓
-Python compact context + benchmark catalog/contact sheet
-↓
-Recruitment Analyst
-↓
-Codex Fact Gate
-↓
-Codex Benchmark Gate
-↓
-Creative Director
-↓
-Codex Design Spec Gate
-↓
-Design Spec Preview
-↓
-Codex Preview Gate
-↓
-Image Generation (no required text)
-↓
-Python Design Spec Renderer
-↓
-Creative Reviewer
-↓
-Codex Final QA
-↓
-Human Final Approval
-```
-
-## Formal Output
-```text
-02_direction/<creative-id>-design-spec.json
-02_direction/previews/<creative-id>-design-preview.png
-03_batches/<creative-id>/v001/background.png
-03_batches/<creative-id>/v001/image-prompt.txt
-03_batches/<creative-id>/v001/design-spec.json
-05_delivery/<creative-id>.png
-05_delivery/<creative-id>-copy.md
-```
-
-## Generate
-Preview PASS後:
+## Candidate First
+Generate:
 ```powershell
 python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 ```
 
-## Token / Cost Efficiency
-- compact context first
-- raw source fallback only
-- Claude出力 compact JSON
-- benchmark最大3
-- route最大2
-- Fact最大3
-- Design SpecをPreview/Renderer/Reviewerで再利用
-- Revision最大2
-- root cause工程だけ再実行
-- PreviewでTypography問題を先に潰す
-
-## Python Responsibilities
-やってよい:
-- Project作成
-- file extraction
-- compact context
-- benchmark catalog/contact sheet
-- media size resolution
-- Design Spec validation
-- typography preview
-- image generation
-- exact Japanese rendering
-- copy.md / save / resize
-
-やってはいけない:
-- Target/訴求/Copy判断
-- benchmark最終選定
-- Layout Family選定
-- Headline意味改行判断
-- Art Direction判断
-- Final QA
-
-## Quality Blockers
-- wrong role/employment type
-- unsupported claim
-- hearing/media mismatch
-- benchmark quality mismatch
-- Design Spec mismatch
-- mechanical template repetition
-- inaccurate/unreadable text
-- major generation artifact
-
-## Local Renderer Test
-```powershell
-python scripts/test_design_renderer.py
+Output:
+```text
+03_batches/CR001/v001/candidate.png
+03_batches/CR001/v001/creative-spec.json
+03_batches/CR001/v001/expected-copy.md
+04_project_review/CR001-v001-text-verification.json
 ```
 
-6 Layout Familyを画像APIなしで確認できる。
+**未審査Candidateを05_deliveryへ直接保存しない。**
+
+## Text Verification
+3 layers:
+1. Local OCR if available
+2. Claude Reviewer visual readback mandatory
+3. Codex final visual check mandatory
+
+Optional OCR:
+```powershell
+python scripts/verify_generated_text.py --project-id PJ-XXXX --creative-id CR001 --version v001
+```
+
+OCRは唯一の正解ではない。
+
+## Review Rules
+Automatic blocker:
+- wrong role/employment type
+- unsupported claim
+- wrong number/unit
+- missing required text
+- misspelled required text
+- invented extra text
+- hearing/media mismatch
+- benchmark quality mismatch
+- unreadable typography
+- weak integrated design
+- major generation artifact
+
+## Safe Mode
+Premiumで同じrequired text errorが原則2回続く場合、Codexが判断して:
+
+```powershell
+python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001 --mode safe_python
+```
+
+旧Design Spec + Python Rendererを利用。
+
+## Formal Promotion
+Codex Final Approval JSON必須。
+
+```powershell
+python scripts/promote_creative.py --project-id PJ-XXXX --creative-id CR001 --version v001 --approval-file "<approval.json>"
+```
+
+Approval flags:
+- creative_reviewer_pass
+- codex_final_qa_pass
+- fact_integrity_pass
+- text_integrity_pass
+
+## Token Efficiency
+- compact context first
+- raw source fallback only
+- Agent output compact JSON
+- benchmark max 3
+- route max 2
+- required text typical max 5 / hard max 6
+- Creative Spec reuse downstream
+- OCR全文をAIへ渡さない
+- revisionはroot causeのみ
+- 全Agent再実行禁止
+
+## Python Responsibilities
+Allowed:
+- Project/input/context
+- benchmark indexing
+- media size
+- spec validation
+- image backend call
+- OCR helper
+- deterministic text comparison
+- candidate/version management
+- promotion
+- Safe Mode renderer
+
+Not allowed in Premium:
+- Copy decision
+- Art Direction
+- Typography design
+- benchmark final selection
+- Creative Final QA
+
+## Formal Output
+```text
+05_delivery/<creative-id>.png
+05_delivery/<creative-id>-copy.md
+05_delivery/<creative-id>-approval.json
+```
+
+Formal output exists only after explicit promotion.
+
+## Detailed Design
+`docs/premium-integrated-ai-v4.md`
