@@ -1,0 +1,3 @@
+# Optional local OCR helper for Premium Mode text verification.
+# The Python package alone is not enough: install the Tesseract executable and Japanese traineddata on Windows.
+pytesseract>=0.3.13
