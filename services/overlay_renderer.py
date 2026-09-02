@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -18,6 +19,15 @@ REGULAR_FONT_CANDIDATES = [
     "C:/Windows/Fonts/meiryo.ttc",
     "C:/Windows/Fonts/msgothic.ttc",
 ]
+SUPPORTED_DESIGN_STYLES = {"benchmark_recruit", "modern_recruit", "clean_recruit"}
+SUPPORTED_LAYOUT_FAMILIES = {
+    "numeric_impact",
+    "short_power_word",
+    "concept_message",
+    "work_scene",
+    "benefit_stack",
+    "emotional_message",
+}
 
 
 def _existing_path(value: str | None) -> Path | None:
@@ -47,76 +57,10 @@ def resolve_font_paths() -> tuple[Path, Path]:
         or _existing_path(os.getenv("JAPANESE_FONT_PATH"))
     )
     if not bold:
-        raise FileNotFoundError(
-            "Japanese bold font was not found. Set JAPANESE_BOLD_FONT_PATH or JAPANESE_FONT_PATH in .env."
-        )
+        raise FileNotFoundError("Japanese bold font was not found. Set JAPANESE_BOLD_FONT_PATH.")
     if not regular:
-        raise FileNotFoundError(
-            "Japanese regular font was not found. Set JAPANESE_REGULAR_FONT_PATH or JAPANESE_FONT_PATH in .env."
-        )
+        raise FileNotFoundError("Japanese regular font was not found. Set JAPANESE_REGULAR_FONT_PATH.")
     return bold, regular
-
-
-def _line_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont) -> int:
-    if not text:
-        return 0
-    bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[2] - bbox[0]
-
-
-def _wrap_one_line(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    max_width: int,
-) -> list[str]:
-    if not text:
-        return [""]
-    if _line_width(draw, text, font) <= max_width:
-        return [text]
-    lines: list[str] = []
-    current = ""
-    for char in text:
-        candidate = current + char
-        if current and _line_width(draw, candidate, font) > max_width:
-            lines.append(current)
-            current = char
-        else:
-            current = candidate
-    if current:
-        lines.append(current)
-    return lines or [text]
-
-
-def _wrap_text(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    max_width: int,
-) -> str:
-    wrapped: list[str] = []
-    for explicit_line in text.splitlines() or [text]:
-        wrapped.extend(_wrap_one_line(draw, explicit_line, font, max_width))
-    return "\n".join(wrapped)
-
-
-def _fit_font_and_text(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font_path: Path,
-    max_width: int,
-    max_size: int,
-    *,
-    max_lines: int,
-    min_size: int = 20,
-) -> tuple[ImageFont.FreeTypeFont, str]:
-    for size in range(max_size, min_size - 1, -2):
-        font = ImageFont.truetype(str(font_path), size=size)
-        wrapped = _wrap_text(draw, text, font, max_width)
-        if len(wrapped.splitlines()) <= max_lines:
-            return font, wrapped
-    font = ImageFont.truetype(str(font_path), size=min_size)
-    return font, _wrap_text(draw, text, font, max_width)
 
 
 def _hex_rgb(value: str) -> tuple[int, int, int]:
@@ -126,43 +70,137 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         raise ValueError(f"Invalid accent color: {value}") from exc
 
 
-def _blend_with_white(rgb: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
-    return tuple(round(channel + (255 - channel) * amount) for channel in rgb)
+def _blend(rgb: tuple[int, int, int], target: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
+    return tuple(round(channel + (target[index] - channel) * amount) for index, channel in enumerate(rgb))
 
 
-def _add_left_readability_gradient(image: Image.Image, strength: int = 220, width_ratio: float = 0.60) -> None:
+def _darken(rgb: tuple[int, int, int], amount: float = 0.18) -> tuple[int, int, int]:
+    return _blend(rgb, (0, 0, 0), amount)
+
+
+def _lighten(rgb: tuple[int, int, int], amount: float = 0.88) -> tuple[int, int, int]:
+    return _blend(rgb, (255, 255, 255), amount)
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont) -> int:
+    if not text:
+        return 0
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
+
+
+def _wrap_line(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    if not text or _text_width(draw, text, font) <= max_width:
+        return [text]
+    lines: list[str] = []
+    current = ""
+    for char in text:
+        candidate = current + char
+        if current and _text_width(draw, candidate, font) > max_width:
+            lines.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _fit_manual_lines(
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    font_path: Path,
+    max_width: int,
+    *,
+    max_size: int,
+    min_size: int,
+    max_lines: int = 3,
+) -> tuple[ImageFont.FreeTypeFont, list[str]]:
+    lines = [line.strip() for line in lines if line.strip()]
+    for size in range(max_size, min_size - 1, -2):
+        font = ImageFont.truetype(str(font_path), size=size)
+        if len(lines) <= max_lines and all(_text_width(draw, line, font) <= max_width for line in lines):
+            return font, lines
+
+    font = ImageFont.truetype(str(font_path), size=min_size)
+    fallback: list[str] = []
+    for line in lines:
+        fallback.extend(_wrap_line(draw, line, font, max_width))
+    if len(fallback) > max_lines:
+        raise ValueError(
+            "Headline does not fit the approved layout. Shorten the copy or provide better semantic line breaks."
+        )
+    return font, fallback
+
+
+def _segments(line: str, emphasis: list[str]) -> list[tuple[str, bool]]:
+    tokens = sorted([token for token in emphasis if token and token in line], key=len, reverse=True)
+    if not tokens:
+        return [(line, False)]
+    pattern = "(" + "|".join(re.escape(token) for token in tokens) + ")"
+    parts = [part for part in re.split(pattern, line) if part]
+    return [(part, part in tokens) for part in parts]
+
+
+def _draw_segmented_line(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    line: str,
+    font: ImageFont.FreeTypeFont,
+    *,
+    emphasis: list[str],
+    normal_fill: tuple[int, int, int, int],
+    emphasis_fill: tuple[int, int, int, int],
+    stroke_width: int = 0,
+    stroke_fill: tuple[int, int, int, int] | None = None,
+) -> None:
+    x, y = xy
+    for segment, strong in _segments(line, emphasis):
+        fill = emphasis_fill if strong else normal_fill
+        draw.text(
+            (x, y),
+            segment,
+            font=font,
+            fill=fill,
+            stroke_width=stroke_width,
+            stroke_fill=stroke_fill,
+        )
+        x += _text_width(draw, segment, font)
+
+
+def _add_readability_gradient(
+    image: Image.Image,
+    *,
+    side: str,
+    width_ratio: float = 0.59,
+    strength: int = 218,
+) -> None:
     width, height = image.size
     panel_w = max(1, round(width * width_ratio))
     overlay = Image.new("RGBA", (panel_w, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay, "RGBA")
-    fade_start = 0.58
+    fade_start = 0.55
     for x in range(panel_w):
         ratio = x / max(1, panel_w - 1)
-        if ratio <= fade_start:
-            alpha = strength
-        else:
-            progress = (ratio - fade_start) / (1.0 - fade_start)
-            alpha = round(strength * (1.0 - progress))
-        draw.line((x, 0, x, height), fill=(255, 255, 255, max(0, alpha)))
-    image.alpha_composite(overlay, (0, 0))
+        alpha = strength if ratio <= fade_start else round(strength * (1 - (ratio - fade_start) / (1 - fade_start)))
+        px = x if side == "left" else panel_w - 1 - x
+        draw.line((px, 0, px, height), fill=(255, 255, 255, max(0, alpha)))
+    image.alpha_composite(overlay, (0, 0) if side == "left" else (width - panel_w, 0))
 
 
-def _split_items(overlay_text: Iterable[dict]) -> tuple[dict | None, dict | None, list[dict], dict | None]:
-    items = [dict(item) for item in overlay_text if str(item.get("text") or "").strip()]
-    headline = next((item for item in items if item.get("role") == "main_copy"), None)
-    subcopy = next((item for item in items if item.get("role") == "sub_copy"), None)
-    facts = [item for item in items if item.get("role") == "fact"]
-    cta = next((item for item in items if item.get("role") == "cta"), None)
-    return headline, subcopy, facts, cta
+def _zone_geometry(width: int, *, side: str, ratio: float = 0.49) -> tuple[int, int]:
+    zone_w = round(width * ratio)
+    margin = max(28, round(width * 0.035))
+    x = margin if side == "left" else width - margin - zone_w
+    return x, zone_w
 
 
-def _draw_benchmark_rays(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    accent: tuple[int, int, int],
-    scale: int,
-) -> None:
+def _draw_accent_bar(draw: ImageDraw.ImageDraw, x: int, y: int, height: int, accent: tuple[int, int, int]) -> None:
+    bar_w = max(7, round(height * 0.012))
+    draw.rounded_rectangle((x, y, x + bar_w, y + height), radius=max(2, bar_w // 2), fill=(*accent, 255))
+
+
+def _draw_rays(draw: ImageDraw.ImageDraw, x: int, y: int, accent: tuple[int, int, int], scale: int) -> None:
     stroke = max(2, scale // 12)
     rays = [
         ((x, y + scale), (x - scale // 3, y + scale // 2)),
@@ -171,300 +209,257 @@ def _draw_benchmark_rays(
         ((x + scale, y + scale), (x + scale * 4 // 3, y + scale // 2)),
     ]
     for start, end in rays:
-        draw.line((*start, *end), fill=(*accent, 220), width=stroke)
+        draw.line((*start, *end), fill=(*accent, 210), width=stroke)
 
 
-def _render_benchmark_recruit(
+def _draw_soft_shape(image: Image.Image, *, side: str, accent: tuple[int, int, int]) -> None:
+    width, height = image.size
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay, "RGBA")
+    shape_w = round(width * 0.27)
+    shape_h = round(height * 0.32)
+    x0 = -shape_w // 3 if side == "left" else width - shape_w * 2 // 3
+    y0 = height - shape_h // 2
+    draw.ellipse((x0, y0, x0 + shape_w, y0 + shape_h), fill=(*_lighten(accent, 0.62), 58))
+    image.alpha_composite(overlay)
+
+
+def _draw_subcopy(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    *,
+    x: int,
+    y: int,
+    max_width: int,
+    font_path: Path,
+    height: int,
+    fill: tuple[int, int, int, int],
+    bold: bool = False,
+) -> int:
+    if not text:
+        return y
+    font = ImageFont.truetype(str(font_path), size=max(20, round(height * (0.042 if bold else 0.038))))
+    lines = _wrap_line(draw, text, font, max_width)
+    if len(lines) > 2:
+        font = ImageFont.truetype(str(font_path), size=max(18, round(height * 0.031)))
+        lines = _wrap_line(draw, text, font, max_width)
+    spacing = max(3, round(font.size * 0.15))
+    value = "\n".join(lines[:2])
+    bbox = draw.multiline_textbbox((0, 0), value, font=font, spacing=spacing)
+    draw.multiline_text((x, y - bbox[1]), value, font=font, fill=fill, spacing=spacing)
+    return y + (bbox[3] - bbox[1]) + max(10, round(height * 0.018))
+
+
+def _draw_facts_and_cta(
+    draw: ImageDraw.ImageDraw,
+    *,
+    facts: list[str],
+    cta: str,
+    x: int,
+    max_width: int,
+    bottom_y: int,
+    bold_font_path: Path,
+    accent: tuple[int, int, int],
+    height: int,
+    family: str,
+) -> None:
+    dark = (29, 31, 34, 255)
+    gap = max(7, round(height * 0.010))
+    accent_light = _lighten(accent, 0.90)
+
+    if cta:
+        font = ImageFont.truetype(str(bold_font_path), size=max(20, round(height * 0.034)))
+        bbox = draw.textbbox((0, 0), cta, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        pad_x, pad_y = max(18, round(font.size * 0.55)), max(8, round(font.size * 0.25))
+        box_w, box_h = tw + pad_x * 2, th + pad_y * 2
+        y = bottom_y - box_h
+        draw.rounded_rectangle((x + 2, y + 4, x + box_w + 2, y + box_h + 4), radius=box_h // 3, fill=(0, 0, 0, 28))
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=box_h // 3, fill=(*accent, 255))
+        draw.text((x + pad_x, y + pad_y - bbox[1]), cta, font=font, fill=(255, 255, 255, 255))
+        bottom_y = y - gap
+
+    if family == "work_scene" and facts:
+        font = ImageFont.truetype(str(bold_font_path), size=max(18, round(height * 0.030)))
+        text = "  /  ".join(facts[:2])
+        lines = _wrap_line(draw, text, font, max_width - 30)
+        value = "\n".join(lines[:2])
+        bbox = draw.multiline_textbbox((0, 0), value, font=font, spacing=2)
+        th = bbox[3] - bbox[1]
+        band_h = th + max(18, round(font.size * 0.6))
+        y = bottom_y - band_h
+        draw.rounded_rectangle((x, y, x + max_width, y + band_h), radius=max(12, band_h // 4), fill=(255, 255, 255, 224))
+        draw.multiline_text((x + 16, y + (band_h - th) // 2 - bbox[1]), value, font=font, fill=dark, spacing=2)
+        return
+
+    fact_font = ImageFont.truetype(str(bold_font_path), size=max(18, round(height * 0.031)))
+    for fact in reversed(facts[:3]):
+        lines = _wrap_line(draw, fact, fact_font, max_width - 30)
+        value = "\n".join(lines[:2])
+        bbox = draw.multiline_textbbox((0, 0), value, font=fact_font, spacing=2)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        pad_x, pad_y = max(13, round(fact_font.size * 0.42)), max(6, round(fact_font.size * 0.20))
+        box_w, box_h = min(max_width, tw + pad_x * 2), th + pad_y * 2
+        y = bottom_y - box_h
+        if family == "benefit_stack":
+            fill = (*_lighten(accent, 0.84), 238)
+            outline = (*accent, 245)
+            radius = max(8, box_h // 4)
+        else:
+            fill = (255, 255, 255, 226)
+            outline = (*accent, 220)
+            radius = max(8, box_h // 2)
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=radius, fill=fill, outline=outline, width=max(2, round(height * 0.0025)))
+        draw.multiline_text((x + pad_x, y + pad_y - bbox[1]), value, font=fact_font, fill=dark, spacing=2)
+        bottom_y = y - gap
+
+
+def _render_design_spec(
     image: Image.Image,
-    overlay_text: Iterable[dict],
+    spec: dict,
     *,
     bold_font_path: Path,
     regular_font_path: Path,
-    accent_color: str,
 ) -> Image.Image:
-    """Photo-led recruitment-ad typography inspired by the benchmark sample grammar.
+    family = str(spec.get("layout_family") or "concept_message")
+    if family not in SUPPORTED_LAYOUT_FAMILIES:
+        raise ValueError(f"Unsupported layout family: {family}")
+    side = str(spec.get("text_zone") or "left")
+    accent = _hex_rgb(str(spec.get("accent_color") or "#E85A3D"))
+    decorations = spec.get("decorations") or {}
 
-    This renderer intentionally avoids dashboard-like cards. It uses a large display
-    headline, one dominant accent color, restrained decorative rays, an optional
-    supporting ribbon, and only a few secondary facts.
-    """
-    _add_left_readability_gradient(image, strength=208, width_ratio=0.59)
+    _add_readability_gradient(image, side=side, width_ratio=0.59 if family != "work_scene" else 0.52, strength=218 if family != "emotional_message" else 196)
+    if decorations.get("soft_shape", True):
+        _draw_soft_shape(image, side=side, accent=accent)
+
     draw = ImageDraw.Draw(image, "RGBA")
     width, height = image.size
-    accent = _hex_rgb(accent_color)
-    accent_dark = tuple(max(0, c - 30) for c in accent)
-    accent_light = _blend_with_white(accent, 0.90)
-    dark = (30, 30, 32, 255)
-
-    headline, subcopy, facts, cta = _split_items(overlay_text)
-    margin_x = max(30, round(width * 0.035))
+    x, zone_w = _zone_geometry(width, side=side, ratio=0.49 if family != "work_scene" else 0.43)
     margin_y = max(28, round(height * 0.05))
-    content_w = round(width * 0.51)
+    dark = (24, 26, 29, 255)
+    muted = (67, 71, 76, 255)
+    accent_dark = _darken(accent, 0.16)
+
+    headline = spec.get("headline") or {}
+    lines = [str(line) for line in headline.get("lines", []) if str(line).strip()]
+    emphasis = [str(value) for value in headline.get("emphasis", []) if str(value).strip()]
+    subcopy = str((spec.get("subcopy") or {}).get("text") or "").strip()
+    facts = [str(value).strip() for value in spec.get("facts", []) if str(value).strip()]
+    cta = str((spec.get("cta") or {}).get("text") or "").strip()
+
+    size_ratio = {
+        "numeric_impact": 0.135,
+        "short_power_word": 0.150,
+        "concept_message": 0.115,
+        "work_scene": 0.085,
+        "benefit_stack": 0.108,
+        "emotional_message": 0.105,
+    }[family]
+    min_ratio = {
+        "numeric_impact": 0.068,
+        "short_power_word": 0.072,
+        "concept_message": 0.060,
+        "work_scene": 0.050,
+        "benefit_stack": 0.056,
+        "emotional_message": 0.055,
+    }[family]
+    font, fitted_lines = _fit_manual_lines(
+        draw,
+        lines,
+        bold_font_path,
+        zone_w - 24,
+        max_size=round(height * size_ratio),
+        min_size=max(30, round(height * min_ratio)),
+        max_lines=3,
+    )
+
+    line_gap = max(1, round(font.size * (0.00 if family in {"numeric_impact", "short_power_word"} else 0.05)))
+    line_h = max(draw.textbbox((0, 0), "Hgあ", font=font)[3], font.size)
+    headline_h = len(fitted_lines) * line_h + max(0, len(fitted_lines) - 1) * line_gap
     cursor_y = margin_y
 
-    if headline:
-        text = str(headline.get("text") or "").strip()
-        font, display_text = _fit_font_and_text(
+    if decorations.get("accent_bar", True):
+        _draw_accent_bar(draw, x, cursor_y + 2, max(headline_h, round(height * 0.09)), accent)
+        text_x = x + max(22, round(width * 0.018))
+    else:
+        text_x = x
+
+    if decorations.get("rays", False):
+        _draw_rays(draw, text_x + max(30, font.size // 2), max(4, cursor_y - font.size // 3), accent, max(24, font.size // 2))
+
+    if family == "emotional_message":
+        quote_font = ImageFont.truetype(str(bold_font_path), size=max(40, round(height * 0.10)))
+        draw.text((text_x - 2, cursor_y - round(quote_font.size * 0.28)), "“", font=quote_font, fill=(*accent, 118))
+        cursor_y += max(8, round(height * 0.015))
+
+    for line in fitted_lines:
+        fill = (*accent_dark, 255) if family in {"concept_message", "emotional_message"} else dark
+        emphasis_fill = (*accent, 255)
+        stroke_width = max(0, round(font.size * 0.012)) if family == "short_power_word" else 0
+        _draw_segmented_line(
             draw,
-            text,
-            bold_font_path,
-            content_w,
-            max_size=round(height * 0.145),
-            max_lines=3,
-            min_size=max(34, round(height * 0.070)),
+            (text_x, cursor_y),
+            line,
+            font,
+            emphasis=emphasis,
+            normal_fill=fill,
+            emphasis_fill=emphasis_fill,
+            stroke_width=stroke_width,
+            stroke_fill=(255, 255, 255, 180) if stroke_width else None,
         )
-        spacing = max(2, round(font.size * 0.03))
-        bbox = draw.multiline_textbbox((0, 0), display_text, font=font, spacing=spacing, stroke_width=1)
-        text_h = bbox[3] - bbox[1]
+        cursor_y += line_h + line_gap
 
-        _draw_benchmark_rays(
-            draw,
-            margin_x + max(35, round(font.size * 0.55)),
-            max(4, cursor_y - round(font.size * 0.25)),
-            accent,
-            max(24, round(font.size * 0.50)),
-        )
-        draw.multiline_text(
-            (margin_x, cursor_y - bbox[1]),
-            display_text,
-            font=font,
-            fill=(*accent_dark, 255),
-            spacing=spacing,
-            stroke_width=max(1, round(font.size * 0.025)),
-            stroke_fill=(255, 255, 255, 215),
-        )
-        cursor_y += text_h + max(14, round(font.size * 0.13))
+    cursor_y += max(10, round(height * 0.018))
+    cursor_y = _draw_subcopy(
+        draw,
+        subcopy,
+        x=text_x if family != "work_scene" else x,
+        y=cursor_y,
+        max_width=zone_w,
+        font_path=regular_font_path if family not in {"benefit_stack", "work_scene"} else bold_font_path,
+        height=height,
+        fill=muted,
+        bold=family in {"benefit_stack", "work_scene"},
+    )
 
-    if subcopy:
-        text = str(subcopy.get("text") or "").strip()
-        font, display_text = _fit_font_and_text(
-            draw,
-            text,
-            bold_font_path,
-            content_w - 18,
-            max_size=round(height * 0.050),
-            max_lines=2,
-            min_size=max(20, round(height * 0.032)),
-        )
-        spacing = max(2, round(font.size * 0.08))
-        bbox = draw.multiline_textbbox((0, 0), display_text, font=font, spacing=spacing)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        pad_x = max(18, round(font.size * 0.55))
-        pad_y = max(7, round(font.size * 0.20))
-        band_w = min(content_w, tw + pad_x * 2)
-        band_h = th + pad_y * 2
-        skew = max(8, round(band_h * 0.18))
-        polygon = [
-            (margin_x + skew, cursor_y),
-            (margin_x + band_w, cursor_y),
-            (margin_x + band_w - skew, cursor_y + band_h),
-            (margin_x, cursor_y + band_h),
-        ]
-        draw.polygon(polygon, fill=(*accent, 238))
-        draw.multiline_text(
-            (margin_x + pad_x, cursor_y + pad_y - bbox[1]),
-            display_text,
-            font=font,
-            fill=(255, 255, 255, 255),
-            spacing=spacing,
-        )
-        cursor_y += band_h + max(10, round(height * 0.014))
+    if family == "concept_message" and subcopy:
+        band_y = cursor_y - max(5, round(height * 0.008))
+        draw.line((text_x, band_y, text_x + round(zone_w * 0.55), band_y), fill=(*accent, 160), width=max(2, round(height * 0.004)))
 
-    bottom_y = height - margin_y
-    fact_font = ImageFont.truetype(str(bold_font_path), size=max(18, round(height * 0.032)))
-    fact_gap = max(7, round(height * 0.010))
-
-    if cta:
-        text = str(cta.get("text") or "").strip()
-        cta_font = ImageFont.truetype(str(bold_font_path), size=max(20, round(height * 0.034)))
-        bbox = draw.textbbox((0, 0), text, font=cta_font)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        pad_x = max(18, round(cta_font.size * 0.55))
-        pad_y = max(8, round(cta_font.size * 0.24))
-        box_w = tw + pad_x * 2
-        box_h = th + pad_y * 2
-        y = bottom_y - box_h
-        draw.rounded_rectangle(
-            (margin_x, y, margin_x + box_w, y + box_h),
-            radius=max(8, box_h // 3),
-            fill=(*accent, 255),
-        )
-        draw.text(
-            (margin_x + pad_x, y + pad_y - bbox[1]),
-            text,
-            font=cta_font,
-            fill=(255, 255, 255, 255),
-        )
-        bottom_y = y - fact_gap
-
-    for item in reversed(facts[:3]):
-        text = str(item.get("text") or "").strip()
-        wrapped = _wrap_text(draw, text, fact_font, content_w - 32)
-        bbox = draw.multiline_textbbox((0, 0), wrapped, font=fact_font, spacing=2)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        pad_x = max(13, round(fact_font.size * 0.42))
-        pad_y = max(6, round(fact_font.size * 0.20))
-        box_w = min(content_w, tw + pad_x * 2)
-        box_h = th + pad_y * 2
-        y = bottom_y - box_h
-        draw.rounded_rectangle(
-            (margin_x, y, margin_x + box_w, y + box_h),
-            radius=max(7, box_h // 2),
-            fill=(255, 255, 255, 225),
-            outline=(*accent, 225),
-            width=max(2, round(height * 0.0025)),
-        )
-        draw.multiline_text(
-            (margin_x + pad_x, y + pad_y - bbox[1]),
-            wrapped,
-            font=fact_font,
-            fill=dark,
-            spacing=2,
-        )
-        bottom_y = y - fact_gap
-
+    _draw_facts_and_cta(
+        draw,
+        facts=facts,
+        cta=cta,
+        x=x,
+        max_width=zone_w,
+        bottom_y=height - margin_y,
+        bold_font_path=bold_font_path,
+        accent=accent,
+        height=height,
+        family=family,
+    )
     return image
 
 
-def _render_modern_recruit(
-    image: Image.Image,
-    overlay_text: Iterable[dict],
-    *,
-    bold_font_path: Path,
-    regular_font_path: Path,
-    accent_color: str,
-) -> Image.Image:
-    _add_left_readability_gradient(image, strength=225, width_ratio=0.62)
-    draw = ImageDraw.Draw(image, "RGBA")
-    width, height = image.size
-    margin_x = max(30, round(width * 0.035))
-    margin_y = max(28, round(height * 0.055))
-    content_w = round(width * 0.49)
-    accent = _hex_rgb(accent_color)
-    accent_light = _blend_with_white(accent, 0.90)
-    dark = (27, 29, 32, 255)
-    muted = (72, 76, 82, 255)
+def render_design_spec(image_path: Path, design_spec: dict, output_path: Path | None = None) -> Path:
+    """Render exact Japanese copy using an AI-authored, validated design spec.
 
-    headline, subcopy, facts, cta = _split_items(overlay_text)
-    cursor_y = margin_y
-
-    if headline:
-        text = str(headline.get("text") or "").strip()
-        font, display_text = _fit_font_and_text(
-            draw,
-            text,
-            bold_font_path,
-            content_w - 30,
-            max_size=round(height * 0.105),
-            max_lines=3,
-            min_size=max(26, round(height * 0.052)),
-        )
-        spacing = max(4, round(font.size * 0.12))
-        bbox = draw.multiline_textbbox((0, 0), display_text, font=font, spacing=spacing)
-        text_h = bbox[3] - bbox[1]
-        bar_w = max(7, round(font.size * 0.10))
-        bar_gap = max(14, round(font.size * 0.22))
-        draw.rounded_rectangle(
-            (margin_x, cursor_y + 3, margin_x + bar_w, cursor_y + text_h - 2),
-            radius=max(2, bar_w // 2),
-            fill=(*accent, 255),
-        )
-        tx = margin_x + bar_w + bar_gap
-        draw.multiline_text(
-            (tx, cursor_y - bbox[1]),
-            display_text,
-            font=font,
-            fill=dark,
-            spacing=spacing,
-        )
-        cursor_y += text_h + max(16, round(font.size * 0.24))
-
-    if subcopy:
-        text = str(subcopy.get("text") or "").strip()
-        font, display_text = _fit_font_and_text(
-            draw,
-            text,
-            regular_font_path,
-            content_w,
-            max_size=round(height * 0.047),
-            max_lines=3,
-            min_size=max(20, round(height * 0.032)),
-        )
-        spacing = max(3, round(font.size * 0.18))
-        bbox = draw.multiline_textbbox((0, 0), display_text, font=font, spacing=spacing)
-        draw.multiline_text(
-            (margin_x, cursor_y - bbox[1]),
-            display_text,
-            font=font,
-            fill=muted,
-            spacing=spacing,
-        )
-
-    bottom_y = height - margin_y
-    if cta:
-        text = str(cta.get("text") or "").strip()
-        font = ImageFont.truetype(str(bold_font_path), size=max(22, round(height * 0.038)))
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        pad_x = max(18, round(font.size * 0.62))
-        pad_y = max(10, round(font.size * 0.34))
-        box_w = tw + pad_x * 2
-        box_h = th + pad_y * 2
-        y = bottom_y - box_h
-        draw.rounded_rectangle(
-            (margin_x, y, margin_x + box_w, y + box_h),
-            radius=max(10, box_h // 3),
-            fill=(*accent, 255),
-        )
-        draw.text(
-            (margin_x + pad_x, y + pad_y - bbox[1]),
-            text,
-            font=font,
-            fill=(255, 255, 255, 255),
-        )
-        bottom_y = y - max(12, round(height * 0.018))
-
-    for item in reversed(facts[:3]):
-        text = str(item.get("text") or "").strip()
-        font, display_text = _fit_font_and_text(
-            draw,
-            text,
-            bold_font_path,
-            content_w - 30,
-            max_size=round(height * 0.037),
-            max_lines=2,
-            min_size=max(18, round(height * 0.028)),
-        )
-        spacing = max(3, round(font.size * 0.10))
-        bbox = draw.multiline_textbbox((0, 0), display_text, font=font, spacing=spacing)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        pad_x = max(14, round(font.size * 0.48))
-        pad_y = max(8, round(font.size * 0.27))
-        box_w = min(content_w, tw + pad_x * 2)
-        box_h = th + pad_y * 2
-        y = bottom_y - box_h
-        draw.rounded_rectangle(
-            (margin_x, y, margin_x + box_w, y + box_h),
-            radius=max(8, box_h // 3),
-            fill=(*accent_light, 238),
-            outline=(*accent, 210),
-            width=max(2, round(height * 0.003)),
-        )
-        draw.multiline_text(
-            (margin_x + pad_x, y + pad_y - bbox[1]),
-            display_text,
-            font=font,
-            fill=dark,
-            spacing=spacing,
-        )
-        bottom_y = y - max(8, round(height * 0.012))
-
-    return image
+    Creative judgment lives in the design spec. Python only renders the approved
+    hierarchy, semantic line breaks, emphasis, layout family, and decorations.
+    """
+    bold_font_path, regular_font_path = resolve_font_paths()
+    output_path = output_path or image_path
+    with Image.open(image_path) as source:
+        image = source.convert("RGBA")
+    image = _render_design_spec(
+        image,
+        design_spec,
+        bold_font_path=bold_font_path,
+        regular_font_path=regular_font_path,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.convert("RGB").save(output_path, format="PNG", optimize=True)
+    return output_path
 
 
 def render_overlay(
@@ -472,36 +467,37 @@ def render_overlay(
     overlay_text: Iterable[dict],
     output_path: Path | None = None,
     *,
-    accent_color: str = "#E84C4C",
+    accent_color: str = "#E85A3D",
     design_style: str = "benchmark_recruit",
 ) -> Path:
-    """Render exact Japanese recruitment-ad copy with deterministic typography."""
-    bold_font_path, regular_font_path = resolve_font_paths()
-    output_path = output_path or image_path
+    """Compatibility wrapper for older callers.
 
-    with Image.open(image_path) as source:
-        image = source.convert("RGBA")
-
+    New production flow should use render_design_spec(). This wrapper converts the
+    old flat overlay items into a concept_message design spec.
+    """
     style = (design_style or "benchmark_recruit").strip().lower()
-    if style == "benchmark_recruit":
-        image = _render_benchmark_recruit(
-            image,
-            overlay_text,
-            bold_font_path=bold_font_path,
-            regular_font_path=regular_font_path,
-            accent_color=accent_color,
-        )
-    elif style in {"modern_recruit", "clean_recruit"}:
-        image = _render_modern_recruit(
-            image,
-            overlay_text,
-            bold_font_path=bold_font_path,
-            regular_font_path=regular_font_path,
-            accent_color=accent_color,
-        )
-    else:
+    if style not in SUPPORTED_DESIGN_STYLES:
         raise ValueError(f"Unsupported design_style={design_style!r}")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    image.convert("RGB").save(output_path, format="PNG", optimize=True)
-    return output_path
+    items = [dict(item) for item in overlay_text if str(item.get("text") or "").strip()]
+    headline = next((item for item in items if item.get("role") == "main_copy"), {})
+    subcopy = next((item for item in items if item.get("role") == "sub_copy"), {})
+    facts = [str(item.get("text") or "").strip() for item in items if item.get("role") == "fact"]
+    cta = next((item for item in items if item.get("role") == "cta"), {})
+    text = str(headline.get("text") or "").strip()
+    lines = headline.get("lines") or [line for line in text.splitlines() if line] or [text]
+    spec = {
+        "version": "compat",
+        "layout_family": "concept_message",
+        "accent_color": accent_color,
+        "text_zone": "left",
+        "headline": {
+            "text": text,
+            "lines": lines,
+            "emphasis": headline.get("emphasis") or [],
+        },
+        "subcopy": {"text": str(subcopy.get("text") or "").strip()},
+        "facts": facts[:3],
+        "cta": {"text": str(cta.get("text") or "").strip()},
+        "decorations": {"accent_bar": True, "rays": False, "soft_shape": True, "bottom_band": False},
+    }
+    return render_design_spec(image_path, spec, output_path)
