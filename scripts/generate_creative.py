@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import os
+import re
 from pathlib import Path
+import shutil
 import sys
 
 from dotenv import load_dotenv
@@ -19,88 +20,62 @@ if str(SCRIPTS_DIR) not in sys.path:
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from load_project import load_environment, resolve_project_dir
+from services.design_spec import DesignSpecError, load_design_spec, write_design_spec
 from services.image_generator import create_image_generator
-from services.overlay_renderer import render_overlay
+from services.overlay_renderer import render_design_spec
 
 
 SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def _overlay_items(args: argparse.Namespace) -> list[dict]:
-    items: list[dict] = [
-        {
-            "role": "main_copy",
-            "text": args.headline,
-        }
-    ]
-    if args.subcopy.strip():
-        items.append(
-            {
-                "role": "sub_copy",
-                "text": args.subcopy,
-            }
-        )
-    for value in args.fact:
-        if value.strip():
-            items.append(
-                {
-                    "role": "fact",
-                    "text": value.strip(),
-                }
-            )
-    if args.cta.strip():
-        items.append(
-            {
-                "role": "cta",
-                "text": args.cta,
-            }
-        )
-    return items
-
-
 def _write_copy_markdown(
     path: Path,
     *,
-    headline: str,
-    subcopy: str,
-    facts: list[str],
-    cta: str,
+    spec: dict,
     width: int,
     height: int,
     provider: str,
-    accent_color: str,
-    design_style: str,
     output_spec_source: str,
+    design_spec_path: Path,
 ) -> None:
+    headline = spec["headline"]["text"]
+    subcopy = spec["subcopy"]["text"]
+    facts = spec["facts"]
+    cta = spec["cta"]["text"]
     lines = [
         "# Creative Copy",
         "",
         "このファイルは完成画像へ実際に後載せした元文言を保持します。",
-        "画像上の自動折り返しは表示上の改行であり、文字列自体は変更していません。",
+        "Headlineの改行はCreative DirectorがDesign Specで意味単位に指定したものです。",
         "",
         "## Headline",
         headline,
         "",
     ]
-    if subcopy.strip():
+    if subcopy:
         lines.extend(["## Subcopy", subcopy, ""])
     if facts:
         lines.append("## Fact Text")
         for fact in facts:
-            if fact.strip():
-                lines.append(f"- {fact.strip()}")
+            lines.append(f"- {fact}")
         lines.append("")
-    if cta.strip():
+    if cta:
         lines.extend(["## CTA", cta, ""])
     lines.extend(
         [
+            "## Design",
+            f"- layout_family: {spec['layout_family']}",
+            f"- text_zone: {spec['text_zone']}",
+            f"- accent_color: {spec['accent_color']}",
+            f"- emphasis: {', '.join(spec['headline'].get('emphasis', [])) or 'none'}",
+            f"- benchmark_refs: {', '.join(spec.get('benchmark_refs', [])) or 'none'}",
+            "",
             "## Technical",
             f"- size: {width}x{height}",
             f"- output_spec_source: {output_spec_source}",
             f"- image_provider: {provider}",
-            f"- design_style: {design_style}",
-            f"- accent_color: {accent_color}",
-            "- required_text_rendering: deterministic_python_overlay",
+            f"- design_spec: {design_spec_path}",
+            "- required_text_rendering: deterministic_python_design_spec",
             "",
         ]
     )
@@ -129,10 +104,10 @@ def _load_creative_context(project_dir: Path) -> tuple[dict, Path]:
 
 
 def _resolve_size(args: argparse.Namespace, context: dict) -> tuple[int, int, str]:
-    spec = context.get("resolved_output_spec", {})
-    context_width = int(spec.get("width") or 1200)
-    context_height = int(spec.get("height") or 628)
-    source = str(spec.get("source") or "phase1_default")
+    output_spec = context.get("resolved_output_spec", {})
+    context_width = int(output_spec.get("width") or 1200)
+    context_height = int(output_spec.get("height") or 628)
+    source = str(output_spec.get("source") or "phase1_default")
 
     if bool(args.width) != bool(args.height):
         raise SystemExit("--width / --height は両方指定するか、両方省略してください。")
@@ -142,52 +117,44 @@ def _resolve_size(args: argparse.Namespace, context: dict) -> tuple[int, int, st
     if width < 256 or height < 256:
         raise SystemExit("width/height must both be at least 256 pixels")
 
-    if spec.get("enforce_aspect_ratio"):
+    if output_spec.get("enforce_aspect_ratio"):
         expected_ratio = context_width / context_height
         actual_ratio = width / height
         if abs(expected_ratio - actual_ratio) > 0.01:
             raise SystemExit(
                 "ヒアリングで指定された媒体比率と生成サイズが一致しません: "
-                f"expected={spec.get('aspect_ratio')} resolved={context_width}x{context_height}, "
+                f"expected={output_spec.get('aspect_ratio')} resolved={context_width}x{context_height}, "
                 f"requested={width}x{height}"
             )
     return width, height, source
 
 
+def _resolve_design_spec_path(project_dir: Path, creative_id: str, explicit: str) -> Path:
+    if explicit.strip():
+        path = Path(explicit).expanduser().resolve()
+    else:
+        path = project_dir / "02_direction" / f"{creative_id}-design-spec.json"
+    if not path.exists():
+        raise SystemExit(
+            f"Design Specがありません: {path}\n"
+            "Creative DirectorのDirection Approval後に、02_directionへDesign Spec JSONを保存してください。"
+        )
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate one project-scoped recruitment creative. The project and compact creative context "
-            "must already exist; final files are always saved in its 05_delivery folder."
+            "Generate one project-scoped recruitment creative from an approved AI Design Spec. "
+            "The image model creates text-free visual material; Python renders exact Japanese typography."
         )
     )
-    parser.add_argument(
-        "--project-id",
-        required=True,
-        help="Project id/folder prefix created by create_project_from_intake.py, e.g. PJ-0003",
-    )
+    parser.add_argument("--project-id", required=True)
     parser.add_argument("--creative-id", default="CR001")
+    parser.add_argument("--design-spec-file", default="")
     parser.add_argument("--output-name", default="")
-    parser.add_argument("--prompt", required=True)
-    parser.add_argument("--negative-prompt", default="")
-    parser.add_argument("--headline", required=True)
-    parser.add_argument("--subcopy", default="")
-    parser.add_argument("--fact", action="append", default=[])
-    parser.add_argument("--cta", default="")
-    parser.add_argument(
-        "--width",
-        type=int,
-        default=0,
-        help="Optional. If omitted, use the hearing-resolved size from creative-context.json.",
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        default=0,
-        help="Optional. If omitted, use the hearing-resolved size from creative-context.json.",
-    )
-    parser.add_argument("--design-style", default="benchmark_recruit")
-    parser.add_argument("--accent-color", default="#E84C4C")
+    parser.add_argument("--width", type=int, default=0)
+    parser.add_argument("--height", type=int, default=0)
     args = parser.parse_args()
 
     if not SAFE_ID_RE.match(args.creative_id):
@@ -204,13 +171,12 @@ def main() -> None:
 
     context, context_path = _load_creative_context(project_dir)
     width, height, output_spec_source = _resolve_size(args, context)
-
-    fact_chip_max = int(os.getenv("FACT_CHIP_MAX", "3"))
-    facts = [value.strip() for value in args.fact if value.strip()]
-    if len(facts) > fact_chip_max:
-        raise SystemExit(
-            f"Fact表示が多すぎます。FACT_CHIP_MAX={fact_chip_max} のため、強いFactだけに絞ってください。"
-        )
+    fact_max = int(os.getenv("FACT_CHIP_MAX", "3"))
+    design_spec_source = _resolve_design_spec_path(project_dir, args.creative_id, args.design_spec_file)
+    try:
+        spec = load_design_spec(design_spec_source, fact_max=fact_max)
+    except DesignSpecError as exc:
+        raise SystemExit(f"Design Spec validation failed: {exc}") from exc
 
     delivery_dir = project_dir / "05_delivery"
     batch_dir = project_dir / "03_batches" / args.creative_id / "v001"
@@ -222,20 +188,21 @@ def main() -> None:
     copy_path = output.with_name(output.stem + "-copy.md")
     background = batch_dir / "background.png"
     prompt_path = batch_dir / "image-prompt.txt"
+    design_spec_copy = batch_dir / "design-spec.json"
+    write_design_spec(design_spec_copy, spec)
 
     generator = create_image_generator()
     provider = getattr(generator, "provider_name", type(generator).__name__)
 
     background_prompt = (
-        args.prompt.strip()
+        spec["image"]["prompt"].strip()
         + "\n\nDo not render any letters, words, captions, logos, watermarks, numbers, or readable text. "
-        "Preserve the approved composition and intentional typography-safe negative space from the art direction."
+        + f"Keep the approved typography-safe area on the {spec['text_zone']} side. "
+        + "The composition must remain visually complete after exact Japanese typography is added later."
     )
-    negative_prompt = args.negative_prompt.strip()
-    if negative_prompt:
-        negative_prompt += ", text, letters, words, captions, watermark"
-    else:
-        negative_prompt = "text, letters, words, captions, watermark"
+    negative_prompt = spec["image"].get("negative_prompt", "").strip()
+    required_negative = "text, letters, words, captions, watermark, fake logo"
+    negative_prompt = f"{negative_prompt}, {required_negative}" if negative_prompt else required_negative
 
     prompt_path.write_text(
         "# Image Prompt\n\n"
@@ -244,6 +211,8 @@ def main() -> None:
         + negative_prompt
         + "\n\n# Context\n\n"
         + f"creative_context: {context_path}\n"
+        + f"design_spec: {design_spec_copy}\n"
+        + f"layout_family: {spec['layout_family']}\n"
         + f"resolved_size: {width}x{height}\n"
         + f"output_spec_source: {output_spec_source}\n",
         encoding="utf-8-sig",
@@ -256,26 +225,16 @@ def main() -> None:
         height=height,
         output_path=background,
     )
-    render_overlay(
-        background,
-        _overlay_items(args),
-        output_path=output,
-        accent_color=args.accent_color,
-        design_style=args.design_style,
-    )
+    render_design_spec(background, spec, output_path=output)
 
     _write_copy_markdown(
         copy_path,
-        headline=args.headline,
-        subcopy=args.subcopy,
-        facts=facts,
-        cta=args.cta,
+        spec=spec,
         width=width,
         height=height,
         provider=provider,
-        accent_color=args.accent_color,
-        design_style=args.design_style,
         output_spec_source=output_spec_source,
+        design_spec_path=design_spec_copy,
     )
 
     print("CREATIVE GENERATION: PASS")
@@ -284,10 +243,12 @@ def main() -> None:
     print(f"BACKEND={provider}")
     print(f"SIZE={width}x{height}")
     print(f"OUTPUT_SPEC_SOURCE={output_spec_source}")
+    print(f"LAYOUT_FAMILY={spec['layout_family']}")
+    print(f"DESIGN_SPEC={design_spec_copy}")
     print(f"BACKGROUND={background}")
     print(f"IMAGE={output}")
     print(f"COPY={copy_path}")
-    print("TEXT_RENDERING=deterministic_python_overlay")
+    print("TEXT_RENDERING=deterministic_python_design_spec")
 
 
 if __name__ == "__main__":
