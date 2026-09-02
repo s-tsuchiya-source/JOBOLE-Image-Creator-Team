@@ -31,6 +31,8 @@ EXPECTED_WORKFLOW = [
     "creative_direction",
     "codex_design_spec_approval",
     "design_spec_save",
+    "design_spec_preview",
+    "codex_preview_approval",
     "image_generation",
     "design_spec_rendering",
     "creative_review",
@@ -76,7 +78,6 @@ def _run_version(command: str) -> tuple[bool, str]:
 def validate_structure(errors: list[str], messages: list[str]) -> None:
     agents_path = REPO_ROOT / "configs" / "agents.yaml"
     workflow_path = REPO_ROOT / "configs" / "workflow.yaml"
-    media_path = REPO_ROOT / "configs" / "media.yaml"
     layouts_path = REPO_ROOT / "configs" / "layouts.yaml"
     agents = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
@@ -114,6 +115,8 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         "scripts/create_project_from_intake.py",
         "scripts/input_loader.py",
         "scripts/prepare_creative_context.py",
+        "scripts/preview_design_spec.py",
+        "scripts/test_design_renderer.py",
         "scripts/generate_creative.py",
         "services/design_spec.py",
         "services/image_generator.py",
@@ -139,6 +142,7 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
 
     create_project_text = (REPO_ROOT / "scripts" / "create_project_from_intake.py").read_text(encoding="utf-8")
     prepare_context_text = (REPO_ROOT / "scripts" / "prepare_creative_context.py").read_text(encoding="utf-8")
+    preview_text = (REPO_ROOT / "scripts" / "preview_design_spec.py").read_text(encoding="utf-8")
     generate_text = (REPO_ROOT / "scripts" / "generate_creative.py").read_text(encoding="utf-8")
     design_spec_text = (REPO_ROOT / "services" / "design_spec.py").read_text(encoding="utf-8")
     overlay_text = (REPO_ROOT / "services" / "overlay_renderer.py").read_text(encoding="utf-8")
@@ -152,6 +156,8 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         errors.append("Creative context preparation must index the original_image benchmark library")
     if "creative-context.json" not in generate_text:
         errors.append("Creative generation must require the prepared compact context")
+    if "load_design_spec" not in preview_text or "render_design_spec" not in preview_text:
+        errors.append("Design Spec preview must validate and render before image generation")
     if "design-spec.json" not in generate_text or "load_design_spec" not in generate_text:
         errors.append("Creative generation must load and snapshot an approved Design Spec")
     if "render_design_spec" not in generate_text:
@@ -172,6 +178,7 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
     messages.append("Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3")
     messages.append("Hearing quantity/media: overrides generic Phase 1 defaults")
     messages.append("Design Spec: REQUIRED before formal rendering")
+    messages.append("Zero-cost typography preview: REQUIRED before image generation")
     messages.append("Layout families: numeric / short-word / concept / work-scene / benefit-stack / emotional")
     messages.append("Text: exact Japanese rendering; semantic line breaks owned by Creative Director")
     messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
@@ -242,10 +249,7 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="jobole_login_") as tmpdir:
         output_path = Path(tmpdir) / "codex.txt"
         codex = subprocess.run(
-            _windows_safe(
-                codex_exe,
-                ["exec", "--ephemeral", "--sandbox", "read-only", "--output-last-message", str(output_path), "-"],
-            ),
+            _windows_safe(codex_exe, ["exec", "--ephemeral", "--sandbox", "read-only", "--output-last-message", str(output_path), "-"]),
             input="Return exactly OK.",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
