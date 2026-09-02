@@ -12,14 +12,13 @@ import tempfile
 import yaml
 from dotenv import load_dotenv
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.image_generator import check_image_backend
-
+from services.text_verifier import _pytesseract_available
 
 REQUIRED_AGENTS = ["recruitment_analyst", "creative_director", "creative_reviewer"]
 EXPECTED_WORKFLOW = [
@@ -29,14 +28,14 @@ EXPECTED_WORKFLOW = [
     "codex_fact_check",
     "codex_benchmark_gate",
     "creative_direction",
-    "codex_design_spec_approval",
-    "design_spec_save",
-    "design_spec_preview",
-    "codex_preview_approval",
-    "image_generation",
-    "design_spec_rendering",
-    "creative_review",
+    "codex_creative_spec_approval",
+    "creative_spec_save",
+    "candidate_generation",
+    "local_text_verification_if_available",
+    "creative_review_with_visual_text_readback",
     "codex_final_qa",
+    "final_approval_file",
+    "formal_promotion",
 ]
 
 
@@ -76,12 +75,12 @@ def _run_version(command: str) -> tuple[bool, str]:
 
 
 def validate_structure(errors: list[str], messages: list[str]) -> None:
-    agents_path = REPO_ROOT / "configs" / "agents.yaml"
-    workflow_path = REPO_ROOT / "configs" / "workflow.yaml"
-    layouts_path = REPO_ROOT / "configs" / "layouts.yaml"
-    agents = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
-    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
-    layouts = yaml.safe_load(layouts_path.read_text(encoding="utf-8")) if layouts_path.exists() else {}
+    agents = yaml.safe_load((REPO_ROOT / "configs" / "agents.yaml").read_text(encoding="utf-8")) or {}
+    workflow = yaml.safe_load((REPO_ROOT / "configs" / "workflow.yaml").read_text(encoding="utf-8")) or {}
+    render_modes = yaml.safe_load((REPO_ROOT / "configs" / "render_modes.yaml").read_text(encoding="utf-8")) or {}
+
+    if agents.get("architecture", {}).get("version") != "phase1_premium_integrated_ai_v4":
+        errors.append("agents architecture version must be phase1_premium_integrated_ai_v4")
 
     chief = agents.get("chief", {}).get("codex_cco", {})
     cco_path = REPO_ROOT / str(chief.get("file") or "")
@@ -97,91 +96,77 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         role_path = REPO_ROOT / str(config.get("file") or "")
         if not role_path.exists():
             errors.append(f"Missing role file: {role_path}")
-
-    extra_active = sorted(set(configured_agents) - set(REQUIRED_AGENTS))
-    if extra_active:
-        errors.append("Unexpected active Claude specialists: " + ", ".join(extra_active))
+    extra = sorted(set(configured_agents) - set(REQUIRED_AGENTS))
+    if extra:
+        errors.append("Unexpected active Claude specialists: " + ", ".join(extra))
 
     steps = workflow.get("workflow", {}).get("steps", [])
     positions = {step: index for index, step in enumerate(steps)}
     for step in EXPECTED_WORKFLOW:
         if step not in positions:
-            errors.append(f"Workflow missing Phase 1 step: {step}")
+            errors.append(f"Workflow missing v4 step: {step}")
     for previous, following in zip(EXPECTED_WORKFLOW, EXPECTED_WORKFLOW[1:]):
         if previous in positions and following in positions and positions[previous] >= positions[following]:
             errors.append(f"Workflow order invalid: {previous} must precede {following}")
 
+    modes = render_modes.get("render_modes", {})
+    if "premium_ai" not in modes or "safe_python" not in modes:
+        errors.append("render_modes.yaml must define premium_ai and safe_python")
+    if not modes.get("premium_ai", {}).get("default"):
+        errors.append("premium_ai must be the default render mode")
+
     required_files = [
         "scripts/create_project_from_intake.py",
-        "scripts/input_loader.py",
         "scripts/prepare_creative_context.py",
-        "scripts/preview_design_spec.py",
-        "scripts/test_design_renderer.py",
         "scripts/generate_creative.py",
+        "scripts/verify_generated_text.py",
+        "scripts/promote_creative.py",
+        "services/creative_spec.py",
+        "services/text_verifier.py",
         "services/design_spec.py",
-        "services/image_generator.py",
         "services/overlay_renderer.py",
+        "configs/render_modes.yaml",
         "configs/media.yaml",
         "configs/layouts.yaml",
+        "requirements-ocr.txt",
     ]
     for relative in required_files:
         if not (REPO_ROOT / relative).exists():
-            errors.append(f"Missing Phase 1 utility: {relative}")
+            errors.append(f"Missing v4 component: {relative}")
 
-    families = set((layouts or {}).get("layout_families", {}).keys())
-    required_families = {
-        "numeric_impact",
-        "short_power_word",
-        "concept_message",
-        "work_scene",
-        "benefit_stack",
-        "emotional_message",
-    }
-    if families != required_families:
-        errors.append(f"Layout family set mismatch: {sorted(families)}")
-
-    create_project_text = (REPO_ROOT / "scripts" / "create_project_from_intake.py").read_text(encoding="utf-8")
-    prepare_context_text = (REPO_ROOT / "scripts" / "prepare_creative_context.py").read_text(encoding="utf-8")
-    preview_text = (REPO_ROOT / "scripts" / "preview_design_spec.py").read_text(encoding="utf-8")
     generate_text = (REPO_ROOT / "scripts" / "generate_creative.py").read_text(encoding="utf-8")
-    design_spec_text = (REPO_ROOT / "services" / "design_spec.py").read_text(encoding="utf-8")
-    overlay_text = (REPO_ROOT / "services" / "overlay_renderer.py").read_text(encoding="utf-8")
+    promote_text = (REPO_ROOT / "scripts" / "promote_creative.py").read_text(encoding="utf-8")
+    creative_spec_text = (REPO_ROOT / "services" / "creative_spec.py").read_text(encoding="utf-8")
+    verifier_text = (REPO_ROOT / "services" / "text_verifier.py").read_text(encoding="utf-8")
     env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
 
-    if "PROJECT_DIR=" not in create_project_text:
-        errors.append("Project intake must print PROJECT_DIR for Codex CCO")
-    if "QUANTITY_SOURCE=" not in create_project_text:
-        errors.append("Project intake must preserve hearing-derived quantity source")
-    if "ORIGINAL_IMAGE_ROOT" not in prepare_context_text or "reference-contact-sheet" not in prepare_context_text:
-        errors.append("Creative context preparation must index the original_image benchmark library")
-    if "creative-context.json" not in generate_text:
-        errors.append("Creative generation must require the prepared compact context")
-    if "load_design_spec" not in preview_text or "render_design_spec" not in preview_text:
-        errors.append("Design Spec preview must validate and render before image generation")
-    if "design-spec.json" not in generate_text or "load_design_spec" not in generate_text:
-        errors.append("Creative generation must load and snapshot an approved Design Spec")
-    if "render_design_spec" not in generate_text:
-        errors.append("Creative generation must use Design Spec rendering")
-    if "ALLOWED_LAYOUT_FAMILIES" not in design_spec_text:
-        errors.append("Design Spec contract must validate layout families")
-    if "render_design_spec" not in overlay_text:
-        errors.append("Renderer must expose render_design_spec")
-    for family in required_families:
-        if family not in overlay_text:
-            errors.append(f"Renderer missing layout family implementation: {family}")
-    if "DESIGN_SPEC_REQUIRED=true" not in env_example:
-        errors.append(".env.example must require Design Spec mode")
+    for token in ["premium_ai", "safe_python", "candidate.png", "creative-spec.json", "verify_image_text"]:
+        if token not in generate_text:
+            errors.append(f"generate_creative.py missing v4 behavior: {token}")
+    if "05_delivery" in generate_text:
+        errors.append("generate_creative.py must not write directly to 05_delivery in candidate-first v4")
+    for token in ["creative_reviewer_pass", "codex_final_qa_pass", "text_integrity_pass", "05_delivery"]:
+        if token not in promote_text:
+            errors.append(f"promote_creative.py missing approval behavior: {token}")
+    if "text_contract" not in creative_spec_text or "build_integrated_image_prompt" not in creative_spec_text:
+        errors.append("creative_spec.py must validate exact text contract and build integrated prompt")
+    if "run_local_ocr" not in verifier_text or "compare_text_contract" not in verifier_text:
+        errors.append("text_verifier.py must support OCR and deterministic text comparison")
+    for token in ["CREATIVE_RENDER_MODE=premium_ai", "PREMIUM_IMAGE_BACKEND=openai", "OCR_LANG=jpn+eng"]:
+        if token not in env_example:
+            errors.append(f".env.example missing v4 configuration: {token}")
 
-    messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + AI Design Spec + Python renderer")
-    messages.append("Minimum intake: job file required; hearing/text optional")
-    messages.append("Compact context: REQUIRED before Claude/image generation")
-    messages.append("Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3")
-    messages.append("Hearing quantity/media: overrides generic Phase 1 defaults")
-    messages.append("Design Spec: REQUIRED before formal rendering")
-    messages.append("Zero-cost typography preview: REQUIRED before image generation")
-    messages.append("Layout families: numeric / short-word / concept / work-scene / benefit-stack / emotional")
-    messages.append("Text: exact Japanese rendering; semantic line breaks owned by Creative Director")
-    messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
+    messages.extend(
+        [
+            "Architecture: VSCode Codex CCO + 3 Claude specialists + Premium integrated image AI",
+            "Premium Mode: image AI designs photo + decoration + Japanese typography together",
+            "Python role: context / generation / OCR helper / candidate promotion; not primary designer",
+            "Safe Mode: deterministic Python typography remains available as fallback",
+            "Text verification: optional local OCR + mandatory Claude visual readback + mandatory Codex final check",
+            "Candidate-first delivery: generate_creative never writes unreviewed output to 05_delivery",
+            "Benchmark library: original_image -> Codex shortlist max 3",
+        ]
+    )
 
 
 def _benchmark_root() -> tuple[Path | None, str]:
@@ -194,23 +179,34 @@ def _benchmark_root() -> tuple[Path | None, str]:
     return None, "unresolved"
 
 
-def validate_benchmark_runtime(errors: list[str], messages: list[str]) -> None:
+def validate_runtime_config(errors: list[str], messages: list[str]) -> None:
     root, source = _benchmark_root()
     if root is None:
-        if os.getenv("BENCHMARK_REFERENCE_REQUIRED", "true").lower() == "true":
-            errors.append("Benchmark root cannot be resolved. Set ORIGINAL_IMAGE_ROOT or PROJECTS_ROOT.")
-        return
-    if not root.exists():
+        errors.append("Benchmark root cannot be resolved")
+    elif not root.exists():
         errors.append(f"Benchmark root does not exist: {root} (source={source})")
-        return
-    extensions = {".png", ".jpg", ".jpeg", ".webp"}
-    count = sum(1 for path in root.rglob("*") if path.is_file() and path.suffix.lower() in extensions)
-    messages.append(f"Benchmark library: OK ({root}, images={count}, source={source})")
-    if count == 0:
-        messages.append("Benchmark library warning: folder exists but currently has no image samples")
+    else:
+        extensions = {".png", ".jpg", ".jpeg", ".webp"}
+        count = sum(1 for path in root.rglob("*") if path.is_file() and path.suffix.lower() in extensions)
+        messages.append(f"Benchmark library: OK ({root}, images={count}, source={source})")
 
+    mode = os.getenv("CREATIVE_RENDER_MODE", "premium_ai").strip().lower()
+    messages.append(f"Render mode: {mode}")
+    if mode == "premium_ai":
+        backend = os.getenv("PREMIUM_IMAGE_BACKEND", "openai").strip().lower()
+        messages.append(f"Premium image backend: {backend}")
+        if backend in {"openai", "openai_api"}:
+            if not os.getenv("OPENAI_API_KEY", "").strip():
+                errors.append("OPENAI_API_KEY is required for Premium Mode with openai backend")
+            if not os.getenv("OPENAI_IMAGE_MODEL", "").strip():
+                errors.append("OPENAI_IMAGE_MODEL is required for Premium Mode with openai backend")
 
-def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
+    ocr_ok, ocr_detail = _pytesseract_available()
+    if ocr_ok:
+        messages.append(f"Optional local OCR: OK ({ocr_detail}, lang={os.getenv('OCR_LANG', 'jpn+eng')})")
+    else:
+        messages.append("Optional local OCR: unavailable; Claude/Codex visual verification remains mandatory")
+
     for label, command in (
         ("Claude Code", os.getenv("CLAUDE_CLI_COMMAND", "claude")),
         ("Codex", os.getenv("CODEX_CLI_COMMAND", "codex")),
@@ -267,8 +263,29 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
             errors.append("Codex login verification failed: " + (codex.stderr or codex.stdout).strip())
 
 
+def verify_image_backend(errors: list[str], messages: list[str]) -> None:
+    previous = os.environ.get("IMAGE_BACKEND")
+    mode = os.getenv("CREATIVE_RENDER_MODE", "premium_ai").strip().lower()
+    backend = (
+        os.getenv("PREMIUM_IMAGE_BACKEND", "openai")
+        if mode == "premium_ai"
+        else os.getenv("SAFE_IMAGE_BACKEND", os.getenv("IMAGE_BACKEND", "openvino_ovms"))
+    ).strip()
+    os.environ["IMAGE_BACKEND"] = backend
+    try:
+        info = check_image_backend()
+        messages.append("Image backend connection/config: OK " + json.dumps(info, ensure_ascii=False))
+    except Exception as exc:
+        errors.append(f"Image backend check failed: {type(exc).__name__}: {exc}")
+    finally:
+        if previous is None:
+            os.environ.pop("IMAGE_BACKEND", None)
+        else:
+            os.environ["IMAGE_BACKEND"] = previous
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate the Design Spec driven Phase 1 architecture.")
+    parser = argparse.ArgumentParser(description="Validate Premium Integrated AI v4 architecture.")
     parser.add_argument("--runtime-config", action="store_true")
     parser.add_argument("--verify-login", action="store_true")
     parser.add_argument("--verify-image", action="store_true")
@@ -278,18 +295,12 @@ def main() -> None:
     messages: list[str] = []
     validate_structure(errors, messages)
 
-    if args.runtime_config:
-        validate_benchmark_runtime(errors, messages)
     if args.runtime_config or args.verify_login:
-        validate_cli_runtime(errors, messages)
+        validate_runtime_config(errors, messages)
     if args.verify_login and not errors:
         verify_logins(errors, messages)
     if args.verify_image and not errors:
-        try:
-            info = check_image_backend()
-            messages.append("Image backend connection: OK " + json.dumps(info, ensure_ascii=False))
-        except Exception as exc:
-            errors.append(f"Image backend check failed: {type(exc).__name__}: {exc}")
+        verify_image_backend(errors, messages)
 
     if errors:
         print("SYSTEM VALIDATION: FAIL")
@@ -300,7 +311,8 @@ def main() -> None:
     print("SYSTEM VALIDATION: PASS")
     print("Claude specialists: 3")
     print("Codex CCO: VSCode highest authority")
-    print("Python AI orchestration: DISABLED")
+    print("Primary render mode: PREMIUM INTEGRATED AI")
+    print("Safe Python typography: FALLBACK ONLY")
     print("Text API keys required: NO")
     for message in messages:
         print(message)
