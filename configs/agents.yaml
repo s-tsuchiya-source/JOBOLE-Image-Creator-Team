@@ -1,9 +1,11 @@
 architecture:
-  version: phase1_benchmark_quality_v2
-  principle: "3 active Claude specialists + VSCode Codex CCO; benchmark-first quality with compact JSON handoffs"
+  version: phase1_design_spec_quality_v3
+  principle: "3 active Claude specialists + VSCode Codex CCO; AI-authored Design Spec + deterministic Python rendering"
   tuning_guide: .claude/agents/README.md
   benchmark_library_env: ORIGINAL_IMAGE_ROOT
   compact_context: scripts/prepare_creative_context.py
+  layout_library: configs/layouts.yaml
+  design_spec_contract: services/design_spec.py
   output_mode: compact_json
 
 chief:
@@ -17,9 +19,9 @@ chief:
       - compact_context_gate
       - fact_gate
       - benchmark_selection
-      - candidate_selection
+      - design_spec_approval
+      - layout_diversity_control
       - hearing_and_media_alignment
-      - creative_direction_approval
       - root_cause_revision_routing
       - final_qa
 
@@ -41,20 +43,21 @@ agents:
 
   creative_director:
     file: .claude/agents/creative-director.md
-    role: integrated_benchmark_led_creative_direction
+    role: integrated_benchmark_led_design_spec_direction
     runtime: claude_code
     auth: subscription_login
     output: compact_json
     expertise:
       - strategy
-      - target_hypothesis
       - benchmark_translation
-      - appeal_competition
       - copywriting
       - art_direction
+      - layout_family_selection
+      - semantic_line_breaks
+      - emphasis_design
       - typography_direction
       - image_prompt
-      - hearing_media_alignment
+      - renderer_ready_design_spec
 
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
@@ -66,17 +69,18 @@ agents:
       - fact_claim_review
       - hearing_alignment
       - benchmark_alignment
+      - design_spec_fidelity
+      - layout_family_quality
       - advertising_impact
-      - copy_review
-      - job_reality_review
       - typography_review
+      - job_reality_review
       - generation_artifact_review
       - root_cause_routing
 
 historical_specialist_files:
   note: >-
     Phase 1では直接実行しない。旧専門Agentの有用な知見はactive Creative Directorへ吸収する。
-    Agent数を戻す前にactive Agent定義とbenchmark運用をチューニングする。
+    Agent数を戻す前にactive Agent定義・Design Spec・Layout Familyをチューニングする。
   production_director: .claude/agents/production-director.md
   copy_director: .claude/agents/copy-director.md
   art_director: .claude/agents/art-director.md
