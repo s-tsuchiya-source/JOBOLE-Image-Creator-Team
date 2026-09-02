@@ -1,9 +1,9 @@
 workflow:
-  mode: phase1_quality_validation
+  mode: phase1_benchmark_quality_validation
 
   goal: >-
-    VSCode Codexを最高責任者として、求人ファイル1つからでも少数の高品質広告画像を作り、
-    人間が品質評価できる状態まで最短で到達する。
+    VSCode Codexを最高責任者として、求人ファイル1つからでも高品質な求人広告画像を作る。
+    求人/Hearingの正確性、original_imageの参考品質、トークン効率を同時に守る。
 
   intake:
     required:
@@ -12,7 +12,7 @@ workflow:
       - hearing_sheet
       - supplementary_text
     do_not_require:
-      - reference_image
+      - user_supplied_reference_image
       - manifest
       - project_id
       - settings_json
@@ -22,13 +22,32 @@ workflow:
       width: 1200
       height: 628
       objective: 求人広告画像制作
+    hearing_overrides_defaults: true
     job_only_generation_allowed: true
     hearing_missing_is_not_blocking: true
 
+  benchmark_library:
+    env: ORIGINAL_IMAGE_ROOT
+    default_path: G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+    use_before_direction_approval: true
+    shortlist_max: 3
+    python_role: index_and_contact_sheet_only
+    creative_selection_owner: codex_cco
+
+  token_efficiency:
+    compact_context_first: true
+    raw_source_is_fallback: true
+    do_not_repeat_raw_csv_to_each_agent: true
+    max_visual_routes: 2
+    max_fact_chips: 3
+    root_cause_revision_only: true
+
   steps:
     - intake
+    - context_preparation
     - recruitment_analysis
     - codex_fact_check
+    - codex_benchmark_gate
     - creative_direction
     - codex_direction_approval
     - image_generation
@@ -39,8 +58,10 @@ workflow:
 
   owners:
     intake: codex_cco
+    context_preparation: python_context_utility
     recruitment_analysis: recruitment_analyst
     codex_fact_check: codex_cco
+    codex_benchmark_gate: codex_cco
     creative_direction: creative_director
     codex_direction_approval: codex_cco
     image_generation: python_image_utility
@@ -48,9 +69,18 @@ workflow:
     codex_final_qa: codex_cco
     human_final_approval: human
 
+  output_spec_resolution:
+    priority:
+      - hearing_sheet_media
+      - explicit_user_size
+      - phase1_default
+    config: configs/media.yaml
+    generation_must_use_resolved_context: true
+
   image_generation:
     required_text_strategy: deterministic_python_overlay
     image_model_should_render_required_text: false
+    creative_context_required: true
     required_outputs:
       - final_image
       - companion_copy_markdown
@@ -58,7 +88,9 @@ workflow:
 
   statuses:
     - awaiting_input
+    - preparing_context
     - analyzing
+    - benchmark_selecting
     - directing
     - generating
     - reviewing
@@ -73,19 +105,25 @@ workflow:
       after: recruitment_analysis
       purpose: 求人事実の誤り・創作を止める
 
+    benchmark_gate:
+      owner: codex_cco
+      after: codex_fact_check
+      purpose: original_imageから案件に合う参考サンプルを最大3件に絞り、Creative Directorへ渡す
+
     direction_approval:
       owner: codex_cco
       after: creative_direction
-      purpose: 戦略・コピー・アート・Prompt・Overlay Textの一貫性を生成前に確認する
+      purpose: 戦略・コピー・アート・Prompt・Overlay Text・媒体サイズの一貫性を生成前に確認する
 
     final_qa:
       owner: codex_cco
       after: creative_review
-      purpose: 求人事実・完成画像・copy.mdを最終横断確認する
+      purpose: 求人事実・ヒアリング・参考品質・完成画像・copy.mdを最終横断確認する
 
   revision:
-    max_count: 3
+    max_count: 2
     return_to_responsible_specialist: true
+    rerun_all_agents: false
 
   delivery:
     human_approval_required: true
@@ -95,6 +133,5 @@ workflow:
     - detailed_manifest
     - bulk_generation
     - automated_cost_guard
-    - contact_sheet_automation
     - slack_intake
     - server_side_orchestration
