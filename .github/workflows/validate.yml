@@ -28,5 +28,8 @@ jobs:
       - name: Validate architecture
         run: python scripts/validate_system.py
 
-      - name: Test Premium exact-text contract
+      - name: Test v4 migration compatibility
         run: python scripts/test_premium_contract.py
+
+      - name: Test Codex ImageGen v5 contract
+        run: python scripts/test_codex_imagegen_contract.py
