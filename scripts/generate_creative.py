@@ -186,7 +186,7 @@ def main() -> None:
         default=0,
         help="Optional. If omitted, use the hearing-resolved size from creative-context.json.",
     )
-    parser.add_argument("--design-style", default="modern_recruit")
+    parser.add_argument("--design-style", default="benchmark_recruit")
     parser.add_argument("--accent-color", default="#E84C4C")
     args = parser.parse_args()
 
@@ -226,8 +226,6 @@ def main() -> None:
     generator = create_image_generator()
     provider = getattr(generator, "provider_name", type(generator).__name__)
 
-    # The image model creates visual material only. Required Japanese copy is
-    # excluded so exact text can be rendered deterministically afterwards.
     background_prompt = (
         args.prompt.strip()
         + "\n\nDo not render any letters, words, captions, logos, watermarks, numbers, or readable text. "
