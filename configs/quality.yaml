@@ -2,15 +2,44 @@ quality:
   reviewer_pass_score: 90
   codex_gate_pass_score: 90
   final_gate_pass_score: 92
-  max_revision_count: 3
+  max_revision_count: 2
   critical_issue_forces_revision: true
   fact_error_forces_revision: true
+  hearing_violation_forces_revision: true
+  benchmark_mismatch_forces_revision: true
   require_traceability: true
-  require_schema_validation: true
+  require_schema_validation: false
+  require_compact_json_contract: true
+
+  benchmark:
+    required_when_library_available: true
+    shortlist_max: 3
+    selection_owner: codex_cco
+    python_may_auto_select: false
+
   competition:
-    strategy_candidate_min: 5
+    message_axis_candidate_min: 3
     copy_candidate_min: 3
-    art_candidate_min: 2
+    visual_route_min: 2
+    visual_route_max: 2
+    fact_chip_max: 3
+
+  delivery_blockers:
+    - wrong_role
+    - wrong_employment_type
+    - unsupported_claim
+    - hearing_media_mismatch
+    - benchmark_quality_mismatch
+    - unreadable_or_inaccurate_text
+    - major_generation_artifact
+
+  token_efficiency:
+    compact_context_first: true
+    raw_source_fallback_only: true
+    compact_json_outputs: true
+    root_cause_revision_only: true
+    rerun_all_agents: false
+
   budget:
     metric: incremental_api_cost_yen
     text_subscription_incremental_api_cost_yen: 0
@@ -20,6 +49,7 @@ quality:
     warning_yen_per_final_image: 330
     stop_and_escalate_yen_per_final_image: 400
     do_not_start_another_revision_at_or_above_yen: 330
+
   human_review:
     always_required_before_external_delivery: true
     escalate_on_revision_limit: true
