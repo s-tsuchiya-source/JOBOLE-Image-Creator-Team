@@ -1,12 +1,10 @@
 # JOBOLE Image Creator Team
 
-**Phase 1 Final v1**
+**Phase 1 Benchmark Quality v2**
 
-JOBOLE向け求人広告画像を、**VSCode Codex Chief Creative Officer + Claude 3専門家 + Python画像/ファイル処理**で制作します。
+JOBOLE向け求人広告画像を、**VSCode Codex Chief Creative Officer + Claude 3専門家 + Python機械処理**で制作します。
 
-## 最終ユーザー体験
-ユーザーから送るものは原則これだけです。
-
+## ユーザーが送るもの
 必須:
 - 求人ファイル
 
@@ -14,12 +12,7 @@ JOBOLE向け求人広告画像を、**VSCode Codex Chief Creative Officer + Clau
 - ヒアリングシート
 - 補足テキスト
 
-求人ファイル1つだけでも制作します。
-
-未指定時:
-- 1枚
-- 1200x628
-- 求人広告画像
+求人ファイル1つだけでも制作可能です。
 
 ## AI組織
 ```text
@@ -32,78 +25,38 @@ VSCode Codex = Chief Creative Officer / 最高責任者
 └─ Claude Creative Reviewer
 ```
 
-実働Claude Agentは3人だけです。Agent数を増やす前に、active Agentの専門判断基準を調整して品質を上げます。
+実働Claudeは3人だけです。品質改善ではAgent数を増やすより、active Agent定義とbenchmarkを調整します。
 
-Agent tuning guide:
-- `.claude/agents/README.md`
+## Shared Benchmark Library
+制作時の参考サンプルはここへ保存します。
 
-## 3専門家
+```text
+G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+```
 
-### Recruitment Analyst
-求人ファイルから以下を整理します。
-- Fact
-- Evidence
-- Advertising Leverage
-- Claim Risk
-- Job Reality
+`.env`:
+```env
+ORIGINAL_IMAGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+REFERENCE_SHORTLIST_MAX=3
+REFERENCE_CONTACT_SHEET_MAX=24
+CREATIVE_ROUTE_MAX=2
+FACT_CHIP_MAX=3
+REVISION_MAX=2
+```
 
-コピーやデザインは作りません。
+Pythonは参考画像の良し悪しを判断しません。
+`scripts/prepare_creative_context.py` がcatalog/contact sheetを作り、Codex CCOが案件に合う参考を最大3件選びます。
 
-### Creative Director
-旧 Production / Copy / Art / Prompt Director の専門性を統合したCreative責任者です。
+## Google Drive Project Hard Rule
+画像制作依頼を受けたら、Claude分析より先に案件を作成します。
 
-担当:
-- Target hypothesis
-- Appeal候補比較
-- Copy候補比較
-- Visual Route候補比較
-- Art Direction
-- Typography
-- Image Prompt
-- Overlay Text
-
-単なる求人条件の羅列ではなく、**求人Fact → 求職者にとっての意味 → Key Message → Copy → Visual**を一貫させます。
-
-### Creative Reviewer
-完成画像と `*-copy.md` を独立Reviewします。
-
-評価:
-- Fact / Claim
-- 1-second / 3-second advertising test
-- Copy
-- Visual / Job Reality
-- Typography / Hierarchy
-- Image Generation Quality
-- Root Cause Routing
-
-読めるだけではPASSしません。
-
-## Codex CCO
-`.codex/chief-creative-officer.md`
-
-最高責任者として次を担当します。
-- Google Drive案件作成確認
-- Fact Gate
-- Appeal / Copy / Visual候補選定
-- Direction Approval
-- Revision Routing
-- Final QA
-- Human Final Approvalへの引き渡し
-
-ClaudeのRecommendedを自動採用せず、Codex自身が比較・判断します。
-
-## 最初のHard Rule: Google Drive案件作成
-画像生成・Claude分析より先に `scripts/create_project_from_intake.py` を実行します。
-
-`.env` の標準 `PROJECTS_ROOT`:
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ```
 
-例:
 ```text
 projects/
-└─ PJ-0003_求人名/
+└─ PJ-XXXX_案件名/
    ├─ project.yaml
    ├─ 00_request/
    ├─ 01_strategy/
@@ -113,77 +66,161 @@ projects/
    └─ 05_delivery/
 ```
 
-Codexは `PROJECT_DIR` と `project.yaml` を確認するまで制作工程へ進みません。
+案件外のDesktop/repo/tmpへ正式成果物を代替保存しません。
 
-案件作成に失敗した場合、Desktop / repo / tmpへ正式画像だけ生成する代替処理は禁止です。
+## Token-Efficient Context
+案件作成後、Claudeを呼ぶ前にCodexが実行します。
 
-## 標準フロー
+```powershell
+python scripts/prepare_creative_context.py --project-id PJ-XXXX
+```
+
+生成:
+```text
+00_request/normalized/
+├─ creative-context.json
+├─ source-bundle.md
+└─ reference_library/
+   ├─ reference-catalog.json
+   └─ reference-contact-sheet-01.jpg ...
+```
+
+`creative-context.json` をAI間の一次入力にします。
+raw CSV全文を3Agentへ毎回渡さず、Fact疑義がある箇所だけ原文へ戻ります。
+
+## Hearing Priority
+ヒアリングの明示条件はgeneric defaultより優先します。
+
+例:
+```text
+ヒアリング: JOBOLE（4:3）
+↓
+configs/media.yaml
+↓
+resolved_output_spec: 1200x900 / 4:3
+↓
+画像生成も4:3で固定
+```
+
+1200x628のgeneric defaultへ勝手に戻しません。
+
+## 3 Claude Specialists
+
+### Recruitment Analyst
+担当:
+- exact role / employment type
+- Fact / Evidence
+- Advertising Leverage
+- Claim Boundary
+- Job Reality
+- hearingとFactの分離
+
+求人に1職種しかなければ別職種を追加しません。正社員だけならアルバイト等を追加しません。
+
+出力: compact JSON
+
+### Creative Director
+担当:
+- hearing alignment
+- benchmark translation
+- message strategy
+- Copy
+- Art Direction
+- Typography Direction
+- Image Prompt
+
+原則Visual Routeは最大2案。参考サンプルが人物写真主体なら、理由なく抽象図形主体へ逃げません。
+
+目標:
+- 1〜2秒で主訴求
+- 3秒で仕事内容＋魅力
+- 人物/仕事写真主体
+- 大きく広告らしい日本語Headline
+- 1つの主アクセントカラー
+- 装飾は補助
+- UIカードを並べただけの見た目を避ける
+
+出力: compact JSON
+
+### Creative Reviewer
+独立Reviewerとして以下をblockします。
+- Fact誤り
+- hearing無視
+- 媒体比率違反
+- benchmark大幅乖離
+- 人物写真benchmarkなのに理由のない抽象イラスト化
+- 機械的Typography
+- 1秒/3秒テスト失敗
+- 画像生成破綻
+
+出力: compact JSON
+
+## Codex CCO
+`.codex/chief-creative-officer.md`
+
+担当:
+- Project作成
+- compact context gate
+- Fact Gate
+- Benchmark Gate
+- hearing/media alignment
+- Direction Gate
+- root-cause revision
+- Final QA
+
+ClaudeのRecommendedをそのまま採用しません。
+
+## Standard Workflow
 ```text
 求人ファイル [必須]
-+ ヒアリング [任意]
-+ 補足テキスト [任意]
++ hearing [任意]
++ text [任意]
 ↓
 Codex CCO
 ↓
-Google Drive案件フォルダ作成・確認
+Project creation
 ↓
-Claude Recruitment Analyst
+Python compact context + original_image catalog/contact sheets
 ↓
-Codex Fact Check
+Recruitment Analyst
 ↓
-Claude Creative Director
-  Appeal候補比較
-  Copy候補比較
-  Visual Route候補比較
+Codex Fact Gate
 ↓
-Codex Direction Approval / Copy確定
+Codex Benchmark Gate（最大3サンプル）
 ↓
-Python Image Tool
-03_batchesへ文字なし背景生成
+Creative Director（最大2 Visual Routes）
 ↓
-Python Typography Overlay
+Codex Direction Gate
 ↓
-05_deliveryへ完成画像 + copy.md
+Image Generation
 ↓
-Claude Creative Reviewer
+Python deterministic Japanese Typography
+↓
+Creative Reviewer
 ↓
 Codex Final QA
 ↓
 Human Final Approval
 ```
 
-## 日本語Typography
-重要な日本語コピーは画像生成AIへ描かせません。
+## Japanese Typography
+重要な日本語は画像生成AIに描かせません。
 
 ```text
-画像AI
-→ 人物・背景・仕事内容・構図・余白
+Image AI
+→ 人物・職場・仕事内容・構図・余白
 
 Python
-→ Codexが確定した日本語を正確に後載せ
+→ 承認済み日本語を正確に描画
 ```
 
-標準 `modern_recruit`:
-- Headline: 最大視線要素、Bold
-- Subcopy: Regularで補助
-- Fact: 原則1〜3個のBenefit Chip
-- CTA: 独立したアクセント色ボタン
-- Bold / Regular / 色 / 余白で情報階層を作る
-- 全要素を同じ白角丸Boxにしない
+標準スタイル:
+- `benchmark_recruit`: 参考サンプル寄り。大きなHeadline、1色アクセント、補助帯、少数Fact
+- `modern_recruit`: 既存の比較的UI寄りレイアウト
 
-完成時:
-```text
-05_delivery/
-├─ CR001.png
-└─ CR001-copy.md
-```
+デフォルトは `benchmark_recruit`。
 
-`CR001-copy.md` には実際に画像へ載せたheadline/subcopy/fact/CTAを保存します。
-
-## 正式画像保存
-`scripts/generate_creative.py` は `--project-id` 必須です。
-
-保存先:
+## Formal Output
 ```text
 03_batches/CR001/v001/background.png
 03_batches/CR001/v001/image-prompt.txt
@@ -191,99 +228,76 @@ Python
 05_delivery/CR001-copy.md
 ```
 
-## Pythonの役割
-使用:
-- `scripts/create_project_from_intake.py`: 案件作成
-- `scripts/input_loader.py`: 入力整理
-- `scripts/generate_creative.py`: 案件内画像生成 + Typography + copy.md
-- `services/image_generator.py`: 画像生成
-- `services/overlay_renderer.py`: 日本語Typography
+`generate_creative.py` は `creative-context.json` を必須とし、ヒアリングで解決された媒体比率を守ります。
 
-Pythonには次を判断させません。
-- Target
-- 訴求
-- Copy
+## Python Responsibilities
+Pythonが行う:
+- Project作成
+- 入力抽出/compact化
+- reference catalog/contact sheet
+- 媒体サイズ解決
+- 画像生成
+- 日本語Typography
+- copy.md
+- リサイズ/保存
+
+Pythonが行わない:
+- Target判断
+- 訴求選定
+- benchmark最終選定
+- Copy選定
 - Art Direction
-- Typography Direction
-- Claude承認
 - Final QA
-- Agent orchestration
+- AI組織オーケストレーション
+
+## Token Efficiency Rules
+- compact context first
+- raw sourceはFact疑義だけ
+- Agent出力はcompact JSON
+- benchmark最大3
+- Visual Route最大2
+- Fact最大3
+- Revision最大2
+- 問題工程だけ再実行
 
 ## Agent Tuning
-品質改善の優先順位:
-
-1. `.claude/agents/creative-director.md`
-   - 訴求 / Copy / Visual / Typography / Prompt
-2. `.claude/agents/creative-reviewer.md`
-   - 低品質PASS防止 / Root Cause
-3. `.claude/agents/recruitment-analyst.md`
-   - Fact / Evidence / 広告材料
-4. `.codex/chief-creative-officer.md`
-   - 統括 / 候補選定 / Revision
-
-旧ファイル:
-- `production-director.md`
-- `copy-director.md`
-- `art-director.md`
-- `prompt-designer.md`
-
-はHistorical Specialistとして残しますが、Phase 1では直接実行しません。有用な知見はactive Agentへ吸収します。
-
 詳細:
 - `.claude/agents/README.md`
 
-## 推測ルール
-求人ファイルだけの場合でも、以下は安全なcreative assumptionとして設定できます。
-- 人物像
-- 求人と矛盾しない一般的服装
-- 背景
-- 構図
-- 色・トーン
-- カメラ距離
+優先順位:
+1. `creative-director.md`
+2. `creative-reviewer.md`
+3. `recruitment-analyst.md`
+4. `.codex/chief-creative-officer.md`
+5. Renderer/Image Backend（実装問題の場合）
 
-推測禁止:
-- 給与
-- 待遇
-- 休日
-- 勤務時間
-- 資格
-- 経験年数
-- 数値実績
-- No.1 / 最短 / 保証等
-
-## 認証
-- Codex CCO: ChatGPTログイン
-- Claude 3専門家: Claude Codeログイン
-- テキストAI用APIキー: 不要
-- OpenAI APIを使う場合: 画像生成だけ
-
-## 構造確認
+## Validation
 ```powershell
 python -m pip install -r requirements.txt
 python -m compileall scripts services
 python scripts/validate_system.py
+python scripts/validate_system.py --runtime-config
 ```
 
-期待値には以下が含まれます。
+期待値:
 ```text
 SYSTEM VALIDATION: PASS
 Claude specialists: 3
 Codex CCO: VSCode highest authority
 Python AI orchestration: DISABLED
 Text API keys required: NO
-Project-scoped generation: REQUIRED before any final image
+Compact context: REQUIRED before Claude/image generation
+Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3
+Hearing media spec: overrides generic size defaults
 Final output: PROJECT_DIR/05_delivery + companion copy.md
-Typography: modern_recruit hierarchy + deterministic Japanese overlay
 ```
 
-## Phase 2以降
-Phase 1で実画像品質を確認してから追加します。
-- 10〜100枚量産
-- 詳細manifest
-- 自動修正ループ
-- コスト自動管理
-- Slack受付
-- Cloud常駐処理
-- Agent再細分化
+## Optional `_index.csv` for original_image
+参考画像が増えたら `original_image/_index.csv` を置くとPythonの候補補助精度が上がります。
 
-**複雑化する前に、Agent tuningで画像品質が上がるかを実画像で検証します。**
+推奨列:
+```csv
+file_path,job_category,role,theme,main_color,layout_type,media,size,notes
+```
+
+これは自動採用ではなく、Codexのbenchmark選定を軽くするmetadataです。
