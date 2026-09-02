@@ -1,9 +1,10 @@
 workflow:
-  mode: phase1_design_spec_quality_v3
+  mode: phase1_premium_integrated_ai_v4
 
   goal: >-
-    VSCode Codexを最高責任者として、求人ファイル1つからでも高品質な求人広告画像を作る。
-    画像AIは文字なしビジュアルを作り、ClaudeがDesign Specを設計し、Pythonが正確な日本語を高品質に描画する。
+    VSCode Codexを最高責任者として、求人ファイル1つからでも一流デザイナー水準を目指す求人広告画像を作る。
+    標準は画像AIが写真・装飾・日本語文字まで一体生成するPremium Mode。
+    Pythonは前処理・生成制御・OCR照合・候補/納品管理へ縮小し、Safe Mode時だけ文字描画を行う。
 
   intake:
     required:
@@ -26,25 +27,27 @@ workflow:
     python_role: index_and_contact_sheet_only
     creative_selection_owner: codex_cco
 
-  design_system:
-    layout_config: configs/layouts.yaml
-    design_spec_contract: services/design_spec.py
-    renderer: services/overlay_renderer.py
-    preview_script: scripts/preview_design_spec.py
-    image_model_renders_required_text: false
-    semantic_line_breaks_owner: creative_director
-    emphasis_owner: creative_director
-    exact_text_rendering_owner: python_renderer
-    multiple_creatives_should_not_all_share_one_layout: true
-    preview_before_paid_generation: true
+  render_modes:
+    config: configs/render_modes.yaml
+    default: premium_ai
+    premium:
+      creative_spec_contract: services/creative_spec.py
+      image_renders_required_text: true
+      text_verification_required: true
+      candidate_first: true
+    safe:
+      design_spec_contract: services/design_spec.py
+      renderer: services/overlay_renderer.py
+      image_renders_required_text: false
+      fallback_only: true
 
   token_efficiency:
     compact_context_first: true
     raw_source_is_fallback: true
     max_benchmarks: 3
     max_visual_routes: 2
-    max_fact_chips: 3
-    reuse_design_spec_for_preview_renderer_and_reviewer: true
+    max_required_text_blocks: 6
+    reuse_creative_spec_for_generation_verification_and_review: true
     root_cause_revision_only: true
 
   steps:
@@ -54,15 +57,14 @@ workflow:
     - codex_fact_check
     - codex_benchmark_gate
     - creative_direction
-    - codex_design_spec_approval
-    - design_spec_save
-    - design_spec_preview
-    - codex_preview_approval
-    - image_generation
-    - design_spec_rendering
-    - creative_review
+    - codex_creative_spec_approval
+    - creative_spec_save
+    - candidate_generation
+    - local_text_verification_if_available
+    - creative_review_with_visual_text_readback
     - codex_final_qa
-    - revision_if_needed
+    - final_approval_file
+    - formal_promotion
     - human_final_approval
 
   owners:
@@ -72,14 +74,14 @@ workflow:
     codex_fact_check: codex_cco
     codex_benchmark_gate: codex_cco
     creative_direction: creative_director
-    codex_design_spec_approval: codex_cco
-    design_spec_save: codex_cco
-    design_spec_preview: python_renderer
-    codex_preview_approval: codex_cco
-    image_generation: python_image_utility
-    design_spec_rendering: python_renderer
-    creative_review: creative_reviewer
+    codex_creative_spec_approval: codex_cco
+    creative_spec_save: codex_cco
+    candidate_generation: python_generation_utility
+    local_text_verification_if_available: python_ocr_helper
+    creative_review_with_visual_text_readback: creative_reviewer
     codex_final_qa: codex_cco
+    final_approval_file: codex_cco
+    formal_promotion: python_delivery_utility
     human_final_approval: human
 
   output_spec_resolution:
@@ -90,52 +92,60 @@ workflow:
     config: configs/media.yaml
     generation_must_use_resolved_context: true
 
-  image_generation:
+  premium_generation:
     creative_context_required: true
-    approved_design_spec_required: true
-    design_spec_default_path: 02_direction/<creative-id>-design-spec.json
-    typography_preview_required: true
-    required_text_strategy: deterministic_python_design_spec
-    required_outputs:
-      - final_image
-      - companion_copy_markdown
-      - design_spec_snapshot
-    copy_markdown_suffix: -copy.md
+    approved_creative_spec_required: true
+    creative_spec_default_path: 02_direction/<creative-id>-creative-spec.json
+    output_is_candidate: true
+    formal_delivery_direct_write: false
+    exact_text_contract_required: true
+    no_extra_readable_text: true
+
+  text_verification:
+    layers:
+      - local_ocr_when_available
+      - claude_visual_readback_required
+      - codex_final_visual_check_required
+    local_ocr_single_source_of_truth: false
+    confirmed_text_error_blocks_delivery: true
+    confirmed_fact_error_blocks_delivery: true
 
   gates:
     fact_check:
       owner: codex_cco
-      purpose: 求人事実の誤り・創作を止める
+      purpose: 求人事実・verbatim表記・数値を固定する
 
     benchmark_gate:
       owner: codex_cco
       purpose: original_imageから案件に合う参考サンプルを最大3件に絞る
 
-    design_spec_approval:
+    creative_spec_approval:
       owner: codex_cco
-      purpose: Layout Family・意味改行・強調語・写真構図・日本語文言を固定する
+      purpose: コピー・exact text contract・写真・Typography・完成広告Promptを生成前に固定する
 
-    preview_approval:
-      owner: codex_cco
-      purpose: 画像生成コストを使う前にTypography・改行・情報階層を仮背景で確認する
+    text_integrity_gate:
+      owner: creative_reviewer_and_codex_cco
+      purpose: 画像AIが生成した日本語・数字・職種・雇用形態をCreative Specと照合する
 
     final_qa:
       owner: codex_cco
-      purpose: Fact・Hearing・Benchmark・Design Spec・完成画像・copy.mdを横断確認する
+      purpose: Fact・Hearing・Benchmark・Text・完成品質を最終横断確認する
 
   revision:
     max_count: 2
     return_to_responsible_specialist: true
     rerun_all_agents: false
+    same_text_error_twice_may_trigger_safe_fallback: true
 
   delivery:
+    candidate_directory: 03_batches/<creative-id>/<version>
+    formal_directory: 05_delivery
+    explicit_approval_required: true
+    promotion_script: scripts/promote_creative.py
     human_approval_required: true
-    require_image_and_copy_file: true
 
   phase2_later:
-    - svg_css_renderer_if_needed
-    - detailed_manifest
-    - bulk_generation
-    - automated_cost_guard
+    - batch_candidate_ranking
+    - automatic_cost_guard
     - slack_intake
     - server_side_orchestration
