@@ -1,7 +1,10 @@
 architecture:
-  version: phase1_final_v1
-  principle: "3 active Claude specialists + VSCode Codex CCO; tune expertise before adding agents"
+  version: phase1_benchmark_quality_v2
+  principle: "3 active Claude specialists + VSCode Codex CCO; benchmark-first quality with compact JSON handoffs"
   tuning_guide: .claude/agents/README.md
+  benchmark_library_env: ORIGINAL_IMAGE_ROOT
+  compact_context: scripts/prepare_creative_context.py
+  output_mode: compact_json
 
 chief:
   codex_cco:
@@ -11,10 +14,13 @@ chief:
     auth: chatgpt_login
     responsibilities:
       - project_scope_and_storage
+      - compact_context_gate
       - fact_gate
+      - benchmark_selection
       - candidate_selection
+      - hearing_and_media_alignment
       - creative_direction_approval
-      - revision_routing
+      - root_cause_revision_routing
       - final_qa
 
 agents:
@@ -23,34 +29,43 @@ agents:
     role: recruitment_fact_and_ad_leverage_analysis
     runtime: claude_code
     auth: subscription_login
+    output: compact_json
     expertise:
+      - exact_job_identity
       - facts
       - evidence
       - advertising_leverage
-      - claim_risk
+      - claim_boundary
       - job_reality
+      - hearing_fact_separation
 
   creative_director:
     file: .claude/agents/creative-director.md
-    role: integrated_creative_direction
+    role: integrated_benchmark_led_creative_direction
     runtime: claude_code
     auth: subscription_login
+    output: compact_json
     expertise:
       - strategy
       - target_hypothesis
+      - benchmark_translation
       - appeal_competition
       - copywriting
       - art_direction
-      - typography
+      - typography_direction
       - image_prompt
+      - hearing_media_alignment
 
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
-    role: independent_creative_quality_review
+    role: independent_delivery_blocking_quality_review
     runtime: claude_code
     auth: subscription_login
+    output: compact_json
     expertise:
       - fact_claim_review
+      - hearing_alignment
+      - benchmark_alignment
       - advertising_impact
       - copy_review
       - job_reality_review
@@ -61,7 +76,7 @@ agents:
 historical_specialist_files:
   note: >-
     Phase 1では直接実行しない。旧専門Agentの有用な知見はactive Creative Directorへ吸収する。
-    Agent数を戻す前にactive Agent定義をチューニングする。
+    Agent数を戻す前にactive Agent定義とbenchmark運用をチューニングする。
   production_director: .claude/agents/production-director.md
   copy_director: .claude/agents/copy-director.md
   art_director: .claude/agents/art-director.md

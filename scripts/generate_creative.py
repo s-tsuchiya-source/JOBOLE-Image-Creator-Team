@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import os
 from pathlib import Path
@@ -69,6 +70,7 @@ def _write_copy_markdown(
     provider: str,
     accent_color: str,
     design_style: str,
+    output_spec_source: str,
 ) -> None:
     lines = [
         "# Creative Copy",
@@ -94,6 +96,7 @@ def _write_copy_markdown(
         [
             "## Technical",
             f"- size: {width}x{height}",
+            f"- output_spec_source: {output_spec_source}",
             f"- image_provider: {provider}",
             f"- design_style: {design_style}",
             f"- accent_color: {accent_color}",
@@ -114,11 +117,48 @@ def _safe_output_name(value: str, creative_id: str) -> str:
     return name
 
 
+def _load_creative_context(project_dir: Path) -> tuple[dict, Path]:
+    context_path = project_dir / "00_request" / "normalized" / "creative-context.json"
+    if not context_path.exists():
+        raise SystemExit(
+            "creative-context.json がありません。画像生成前に必ず "
+            "python scripts/prepare_creative_context.py --project-id <PJ-XXXX> を実行してください。"
+        )
+    data = json.loads(context_path.read_text(encoding="utf-8-sig"))
+    return data, context_path
+
+
+def _resolve_size(args: argparse.Namespace, context: dict) -> tuple[int, int, str]:
+    spec = context.get("resolved_output_spec", {})
+    context_width = int(spec.get("width") or 1200)
+    context_height = int(spec.get("height") or 628)
+    source = str(spec.get("source") or "phase1_default")
+
+    if bool(args.width) != bool(args.height):
+        raise SystemExit("--width / --height は両方指定するか、両方省略してください。")
+
+    width = int(args.width or context_width)
+    height = int(args.height or context_height)
+    if width < 256 or height < 256:
+        raise SystemExit("width/height must both be at least 256 pixels")
+
+    if spec.get("enforce_aspect_ratio"):
+        expected_ratio = context_width / context_height
+        actual_ratio = width / height
+        if abs(expected_ratio - actual_ratio) > 0.01:
+            raise SystemExit(
+                "ヒアリングで指定された媒体比率と生成サイズが一致しません: "
+                f"expected={spec.get('aspect_ratio')} resolved={context_width}x{context_height}, "
+                f"requested={width}x{height}"
+            )
+    return width, height, source
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate one project-scoped recruitment creative. A project must already "
-            "exist under PROJECTS_ROOT; final files are always saved in its 05_delivery folder."
+            "Generate one project-scoped recruitment creative. The project and compact creative context "
+            "must already exist; final files are always saved in its 05_delivery folder."
         )
     )
     parser.add_argument(
@@ -134,14 +174,22 @@ def main() -> None:
     parser.add_argument("--subcopy", default="")
     parser.add_argument("--fact", action="append", default=[])
     parser.add_argument("--cta", default="")
-    parser.add_argument("--width", type=int, default=1200)
-    parser.add_argument("--height", type=int, default=628)
-    parser.add_argument("--design-style", default="modern_recruit")
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=0,
+        help="Optional. If omitted, use the hearing-resolved size from creative-context.json.",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=0,
+        help="Optional. If omitted, use the hearing-resolved size from creative-context.json.",
+    )
+    parser.add_argument("--design-style", default="benchmark_recruit")
     parser.add_argument("--accent-color", default="#E84C4C")
     args = parser.parse_args()
 
-    if args.width < 256 or args.height < 256:
-        raise SystemExit("width/height must both be at least 256 pixels")
     if not SAFE_ID_RE.match(args.creative_id):
         raise SystemExit("--creative-id は英数字・ハイフン・アンダースコアのみ使用できます。")
 
@@ -152,6 +200,16 @@ def main() -> None:
         raise SystemExit(
             f"案件フォルダが不完全です: {project_dir}\n"
             "画像生成より先に create_project_from_intake.py で案件を作成してください。"
+        )
+
+    context, context_path = _load_creative_context(project_dir)
+    width, height, output_spec_source = _resolve_size(args, context)
+
+    fact_chip_max = int(os.getenv("FACT_CHIP_MAX", "3"))
+    facts = [value.strip() for value in args.fact if value.strip()]
+    if len(facts) > fact_chip_max:
+        raise SystemExit(
+            f"Fact表示が多すぎます。FACT_CHIP_MAX={fact_chip_max} のため、強いFactだけに絞ってください。"
         )
 
     delivery_dir = project_dir / "05_delivery"
@@ -168,13 +226,10 @@ def main() -> None:
     generator = create_image_generator()
     provider = getattr(generator, "provider_name", type(generator).__name__)
 
-    # The image model creates visual material only. Required Japanese copy is
-    # excluded so exact text can be rendered deterministically afterwards.
     background_prompt = (
         args.prompt.strip()
-        + "\n\nDo not render any letters, words, captions, logos, watermarks, "
-        "numbers, or readable text. Leave intentional negative space on the left "
-        "for professionally designed recruitment-ad typography."
+        + "\n\nDo not render any letters, words, captions, logos, watermarks, numbers, or readable text. "
+        "Preserve the approved composition and intentional typography-safe negative space from the art direction."
     )
     negative_prompt = args.negative_prompt.strip()
     if negative_prompt:
@@ -187,15 +242,18 @@ def main() -> None:
         + background_prompt
         + "\n\n# Negative Prompt\n\n"
         + negative_prompt
-        + "\n",
+        + "\n\n# Context\n\n"
+        + f"creative_context: {context_path}\n"
+        + f"resolved_size: {width}x{height}\n"
+        + f"output_spec_source: {output_spec_source}\n",
         encoding="utf-8-sig",
     )
 
     generator.generate(
         prompt=background_prompt,
         negative_prompt=negative_prompt,
-        width=args.width,
-        height=args.height,
+        width=width,
+        height=height,
         output_path=background,
     )
     render_overlay(
@@ -210,19 +268,22 @@ def main() -> None:
         copy_path,
         headline=args.headline,
         subcopy=args.subcopy,
-        facts=args.fact,
+        facts=facts,
         cta=args.cta,
-        width=args.width,
-        height=args.height,
+        width=width,
+        height=height,
         provider=provider,
         accent_color=args.accent_color,
         design_style=args.design_style,
+        output_spec_source=output_spec_source,
     )
 
     print("CREATIVE GENERATION: PASS")
     print(f"PROJECT_ID={args.project_id}")
     print(f"PROJECT_DIR={project_dir}")
     print(f"BACKEND={provider}")
+    print(f"SIZE={width}x{height}")
+    print(f"OUTPUT_SPEC_SOURCE={output_spec_source}")
     print(f"BACKGROUND={background}")
     print(f"IMAGE={output}")
     print(f"COPY={copy_path}")

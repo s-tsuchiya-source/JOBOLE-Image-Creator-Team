@@ -17,7 +17,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# For local project operation, .env is the source of truth.
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.image_generator import check_image_backend
@@ -31,8 +30,10 @@ REQUIRED_AGENTS = [
 
 EXPECTED_WORKFLOW = [
     "intake",
+    "context_preparation",
     "recruitment_analysis",
     "codex_fact_check",
+    "codex_benchmark_gate",
     "creative_direction",
     "codex_direction_approval",
     "image_generation",
@@ -79,6 +80,7 @@ def _run_version(command: str) -> tuple[bool, str]:
 def validate_structure(errors: list[str], messages: list[str]) -> None:
     agents_path = REPO_ROOT / "configs" / "agents.yaml"
     workflow_path = REPO_ROOT / "configs" / "workflow.yaml"
+    media_path = REPO_ROOT / "configs" / "media.yaml"
     agents = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
 
@@ -110,41 +112,89 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
         if previous in positions and following in positions and positions[previous] >= positions[following]:
             errors.append(f"Workflow order invalid: {previous} must precede {following}")
 
-    deprecated_run = REPO_ROOT / "scripts" / "run_production.py"
-    if not deprecated_run.exists():
+    if not (REPO_ROOT / "scripts" / "run_production.py").exists():
         errors.append("Deprecated run_production shim is missing")
 
     required_python_utilities = [
         "scripts/create_project_from_intake.py",
         "scripts/input_loader.py",
+        "scripts/prepare_creative_context.py",
         "scripts/generate_creative.py",
         "services/image_generator.py",
         "services/overlay_renderer.py",
+        "configs/media.yaml",
     ]
     for relative in required_python_utilities:
         if not (REPO_ROOT / relative).exists():
             errors.append(f"Missing Phase 1 utility: {relative}")
 
+    if not media_path.exists():
+        errors.append("Missing hearing-aware media configuration: configs/media.yaml")
+
     create_project_text = (REPO_ROOT / "scripts" / "create_project_from_intake.py").read_text(encoding="utf-8")
+    prepare_context_text = (REPO_ROOT / "scripts" / "prepare_creative_context.py").read_text(encoding="utf-8")
     generate_text = (REPO_ROOT / "scripts" / "generate_creative.py").read_text(encoding="utf-8")
     overlay_text = (REPO_ROOT / "services" / "overlay_renderer.py").read_text(encoding="utf-8")
+    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
 
     if "PROJECT_DIR=" not in create_project_text:
         errors.append("Project intake must print PROJECT_DIR for Codex CCO")
+    if "QUANTITY_SOURCE=" not in create_project_text:
+        errors.append("Project intake must preserve hearing-derived quantity source")
+    if "ORIGINAL_IMAGE_ROOT" not in prepare_context_text or "reference-contact-sheet" not in prepare_context_text:
+        errors.append("Creative context preparation must index the original_image benchmark library")
+    if "creative-context.json" not in generate_text:
+        errors.append("Creative generation must require the prepared compact context")
     if '"--project-id"' not in generate_text or "required=True" not in generate_text:
         errors.append("Creative generation must require --project-id")
     if 'project_dir / "05_delivery"' not in generate_text:
         errors.append("Creative generation must save final output inside 05_delivery")
     if 'project_dir / "03_batches"' not in generate_text:
         errors.append("Creative generation must save generation artifacts inside 03_batches")
-    if "modern_recruit" not in overlay_text:
-        errors.append("Recruitment typography renderer must provide modern_recruit style")
+    if "benchmark_recruit" not in overlay_text:
+        errors.append("Recruitment typography renderer must provide benchmark_recruit style")
+    if "ORIGINAL_IMAGE_ROOT=" not in env_example:
+        errors.append(".env.example must define ORIGINAL_IMAGE_ROOT")
+    if "REFERENCE_SHORTLIST_MAX=" not in env_example:
+        errors.append(".env.example must define token-efficient benchmark shortlist settings")
 
     messages.append("Architecture: VSCode Codex CCO + 3 Claude specialists + Python file/image utilities")
     messages.append("Minimum intake: job file required; hearing/text optional")
+    messages.append("Compact context: REQUIRED before Claude/image generation")
+    messages.append("Benchmark library: original_image -> catalog/contact sheet -> Codex shortlist max 3")
+    messages.append("Hearing quantity/media: overrides generic Phase 1 defaults")
     messages.append("Project-scoped generation: REQUIRED before any final image")
     messages.append("Final output: PROJECT_DIR/05_delivery + companion copy.md")
-    messages.append("Typography: modern_recruit hierarchy + deterministic Japanese overlay")
+    messages.append("Typography: benchmark_recruit default + deterministic Japanese overlay")
+
+
+def _benchmark_root() -> tuple[Path | None, str]:
+    configured = os.getenv("ORIGINAL_IMAGE_ROOT", "").strip()
+    if configured:
+        return Path(configured), "ORIGINAL_IMAGE_ROOT"
+
+    projects_root = os.getenv("PROJECTS_ROOT", "").strip()
+    if projects_root:
+        return Path(projects_root).parent / "original_image", "derived_from_PROJECTS_ROOT"
+    return None, "unresolved"
+
+
+def validate_benchmark_runtime(errors: list[str], messages: list[str]) -> None:
+    root, source = _benchmark_root()
+    if root is None:
+        if os.getenv("BENCHMARK_REFERENCE_REQUIRED", "true").lower() == "true":
+            errors.append("Benchmark root cannot be resolved. Set ORIGINAL_IMAGE_ROOT or PROJECTS_ROOT.")
+        return
+
+    if not root.exists():
+        errors.append(f"Benchmark root does not exist: {root} (source={source})")
+        return
+
+    extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    count = sum(1 for path in root.rglob("*") if path.is_file() and path.suffix.lower() in extensions)
+    messages.append(f"Benchmark library: OK ({root}, images={count}, source={source})")
+    if count == 0:
+        messages.append("Benchmark library warning: folder exists but currently has no image samples")
 
 
 def validate_cli_runtime(errors: list[str], messages: list[str]) -> None:
@@ -224,7 +274,7 @@ def verify_logins(errors: list[str], messages: list[str]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate the simplified Phase 1 architecture.")
+    parser = argparse.ArgumentParser(description="Validate the benchmark-aware Phase 1 architecture.")
     parser.add_argument("--runtime-config", action="store_true")
     parser.add_argument("--verify-login", action="store_true")
     parser.add_argument("--verify-image", action="store_true")
@@ -234,6 +284,8 @@ def main() -> None:
     messages: list[str] = []
     validate_structure(errors, messages)
 
+    if args.runtime_config:
+        validate_benchmark_runtime(errors, messages)
     if args.runtime_config or args.verify_login:
         validate_cli_runtime(errors, messages)
     if args.verify_login and not errors:

@@ -1,7 +1,11 @@
 knowledge:
   root_env: KNOWLEDGE_ROOT
+  benchmark_root_env: ORIGINAL_IMAGE_ROOT
   golden_creatives: golden_creatives
   rejected_creatives: rejected_creatives
   brand_rules: brand_rules
   media_rules: media_rules
+  original_image_role: >-
+    Human-curated production benchmark library used before Creative Direction approval.
+    Python indexes/contact-sheets it; Codex CCO chooses the actual benchmark samples.
   description: Real benchmark images and internal reference material stay outside GitHub.

@@ -1,106 +1,163 @@
 # CLAUDE.md
 
-## 目的
-Claudeは本プロジェクトで制作を担当する専門家。最高責任者ではない。
+## Role in This Project
+Claudeは本プロジェクトの専門作業者。最高責任者ではない。
+最高責任者はVSCode上のCodex Chief Creative Officer（CCO）。
 
-最高責任者はVSCode上のCodex Chief Creative Officer（CCO）であり、ClaudeはCodexから明確な役割を受けて作業する。
+Claudeは3役だけをactive運用する。
+- Recruitment Analyst
+- Creative Director
+- Creative Reviewer
 
-## ユーザー入力の前提
-ユーザーから受け取るものは最小限にする。
+旧 Production / Copy / Art / Prompt Director は直接実行しない。
 
-必須:
-- 求人ファイル
+## Input Contract
+一次入力は `00_request/normalized/creative-context.json`。
 
-任意:
-- ヒアリングシート
-- 補足テキスト
+raw求人/ヒアリングは次の場合だけ参照する。
+- Factが曖昧
+- 数値/条件を原文確認する必要がある
+- CCOから明示的に求められた
 
-求人ファイルだけでも制作を進める。ヒアリングや補足テキストが無いこと自体を `needs_clarification` の理由にしない。
+同じraw CSVを毎回全文再読しない。
 
-## Claude 3専門家
-### Recruitment Analyst
-求人ファイルから事実だけを整理する。ヒアリングが無くても完了する。
+## Source Priority
+1. 求人ファイル = Fact正本
+2. ヒアリング = 希望/媒体/枚数/NG/テイスト
+3. 補足テキスト = 追加希望
+4. Codexが選定した `original_image` benchmark = デザイン参考
 
-### Creative Director
-承認済み求人事実と、存在する場合のみヒアリング/補足テキストを使い、戦略・コピー・Art Direction・画像Prompt・Overlay Textを一体設計する。
+## Benchmark
+共有参考:
+```text
+G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+```
 
-求人ファイルだけの場合も、人物・構図・背景・トーン等の安全なcreative assumptionを置いて案を完成させる。給与・待遇・資格・数値等は推測しない。
+Creative DirectorはCodexが選んだ最大3件だけを参照する。
+大量画像を自分で全探索しない。
 
-### Creative Reviewer
-完成画像と `*-copy.md` を独立レビューし、問題・重大度・戻し先をCodexへ報告する。
+benchmarkはコピー対象ではなく:
+- composition
+- photo density
+- text scale
+- color system
+- decorative language
+- whitespace
+- overall energy
 
-Phase 1ではProduction Director / Copy Director / Art Director / Prompt Designerを別Agentとして使用しない。Creative Directorへ統合する。
+の品質文法として使う。
 
-## 認証
-- Claude Codeのログイン済みサブスクリプションを使用する。
-- テキスト制作のために `ANTHROPIC_API_KEY` を要求しない。
-- ClaudeはCodexからVSCodeターミナル経由で直接呼び出される。
-- PythonをClaudeオーケストレーターとして使わない。
+## Hearing Priority
+ヒアリング明示指定はgeneric defaultより優先。
 
-## 絶対ルール
-1. Codex CCOの指示範囲だけを担当する。
-2. 求人ファイルにない事実を創作しない。
-3. ヒアリング不足だけで制作を止めない。
-4. 不明な求人事実は明示する。
-5. 承認済み上流内容を理由なく変更しない。
-6. 根拠不明の数値、No.1、最短、必ず、保証を作らない。
-7. ブランド・媒体ルールがあれば従う。
-8. CreatorとReviewerの役割を混ぜない。
-9. 最終承認者として振る舞わない。
-10. 日本語重要文言は画像AIへ直接描かせず、Python後載せ用Overlay Textとして分離する。
+例:
+- `JOBOLE（4:3）` -> 4:3で制作
+- `制作枚数=4` -> 4枚案件
+- `omakase` -> 自由創作ではなく、Fact/媒体/benchmarkから最適案を選ぶ
 
-## Phase 1ワークフロー
+## Recruitment Analyst
+ファイル: `.claude/agents/recruitment-analyst.md`
+
+禁止:
+- Copy作成
+- Art Direction
+- 別職種追加
+- 別雇用形態追加
+- 未記載条件の補完
+
+返答: compact JSONのみ。
+
+## Creative Director
+ファイル: `.claude/agents/creative-director.md`
+
+担当:
+- hearing alignment
+- benchmark translation
+- strategy
+- Copy
+- Art Direction
+- Typography Direction
+- Image Prompt
+
+Visual Routeは通常最大2。
+benchmarkが人物写真主体なら、理由なく抽象イラスト/図形主体へ逸脱しない。
+
+返答: compact JSONのみ。
+
+## Creative Reviewer
+ファイル: `.claude/agents/creative-reviewer.md`
+
+独立性を保ち、以下をblockする。
+- Fact誤り
+- hearing無視
+- 媒体比率違反
+- benchmark大幅乖離
+- 機械的Typography
+- 1秒/3秒テスト失敗
+- 生成破綻
+
+返答: compact JSONのみ。
+
+## Token Efficiency
+品質を落とさず以下を守る。
+- compact context first
+- raw source fallback only
+- JSON only
+- benchmark max 3
+- visual route max 2
+- fact max 3
+- long essay禁止
+- 同じ分析を複数Agentで重複しない
+- 局所問題で全Agent再実行を要求しない
+
+## Japanese Text
+重要な日本語を画像AIへ直接描かせない。
+
+Creative Directorは最終候補を文字列として確定する。
+- headline
+- subcopy
+- fact_chips
+- cta
+
+Pythonが正確に後載せする。
+
+## Absolute Rules
+1. Codex CCOの指示範囲だけ担当する。
+2. 求人にないFactを作らない。
+3. hearing不足だけで停止しない。
+4. hearingの明示指定を無視しない。
+5. benchmark選定はCodexに従う。
+6. CreatorとReviewerを混ぜない。
+7. Reviewerは最終承認者ではない。
+8. 数値/給与/休日/資格/雇用形態は特に厳格。
+9. `copy.md` と画像内文言の一致を守る。
+10. 出力を短く、判断基準を厳しくする。
+
+## Workflow
 ```text
 Codex CCO
 ↓
+compact context
+↓
 Recruitment Analyst
 ↓
-Codex Fact Check
+Codex Fact Gate
+↓
+Codex Benchmark Gate
 ↓
 Creative Director
 ↓
-Codex Direction Approval / Copy確定
+Codex Direction Gate
 ↓
-画像生成 → Python日本語overlay → 完成画像 + copy.md
+Image Generation + Python Japanese overlay
 ↓
 Creative Reviewer
 ↓
 Codex Final QA
 ```
 
-## 出力形式
-Phase 1では大量のJSON Schemaを前提にしない。
-
-各役割ファイルで指定された見出しを持つ構造化Markdownを基本とし、Codexが人間と同様に読み、判断できることを優先する。
-
-## テキスト品質
-Creative Directorは必ず、画像内に載せる最終候補を文字列として出力する。
-
-- headline: 必須
-- subcopy: 任意
-- fact_text: 任意
-- CTA: 任意
-- placement: 各文言ごとに指定
-
-Reviewerは完成画像と `*-copy.md` を照合し、誤字・数字・単位・文字切れ・判読性を確認する。
-
-## データ管理
-- 実案件・顧客情報・求人ファイル・ヒアリング・補足テキスト・生成画像はGoogle Drive側の案件フォルダへ保存する。
-- GitHubにはAI組織、ルール、汎用スクリプトだけを保存する。
+## Data Management
+- 実案件データ・求人・hearing・画像はGoogle Drive案件フォルダ。
+- benchmark画像は `original_image`。
+- GitHubには汎用ルール/Agent/コードだけ。
 - 実案件データをGitHubへコミットしない。
-
-## 品質
-- 見た目より先に求人事実一致。
-- コピーとビジュアルは同じKey Messageを強化する。
-- 日本語重要文言は画像生成AI任せにせずPythonで後載せする。
-- 使用したコピーを別Markdownでも残す。
-- Reviewerは問題を診断し、Codexが最終判断する。
-
-## Phase 2以降
-Phase 1で人間が品質を評価し、AI制作の勝ち筋が確認できた後にのみ、以下を再検討する。
-- Agent細分化
-- JSON Schema厳格化
-- 自動修正ループ
-- 大量生成
-- コスト自動管理
-- Slack / Cloud自動受付

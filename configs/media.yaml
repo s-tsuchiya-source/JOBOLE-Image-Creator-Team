@@ -1,0 +1,23 @@
+media_presets:
+  default:
+    width: 1200
+    height: 628
+    aspect_ratio: "1.91:1"
+    enforce_aspect_ratio: false
+
+  jobole_4_3:
+    aliases:
+      - "JOBOLE（4:3）"
+      - "JOBOLE(4:3)"
+      - "JOBOLE 4:3"
+      - "JOBOLE（4：3）"
+    width: 1200
+    height: 900
+    aspect_ratio: "4:3"
+    enforce_aspect_ratio: true
+    note: "Hearing-sheet media selection overrides the generic Phase 1 default."
+
+resolution_priority:
+  - hearing_sheet_media
+  - explicit_user_size
+  - default
