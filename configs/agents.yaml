@@ -1,11 +1,12 @@
 architecture:
-  version: phase1_design_spec_quality_v3
-  principle: "3 active Claude specialists + VSCode Codex CCO; AI-authored Design Spec + deterministic Python rendering"
+  version: phase1_premium_integrated_ai_v4
+  principle: "3 active Claude specialists + VSCode Codex CCO; premium AI creates the complete banner including Japanese text, Python verifies and manages delivery"
   tuning_guide: .claude/agents/README.md
   benchmark_library_env: ORIGINAL_IMAGE_ROOT
   compact_context: scripts/prepare_creative_context.py
-  layout_library: configs/layouts.yaml
-  design_spec_contract: services/design_spec.py
+  render_modes: configs/render_modes.yaml
+  premium_creative_spec_contract: services/creative_spec.py
+  safe_design_spec_contract: services/design_spec.py
   output_mode: compact_json
 
 chief:
@@ -19,16 +20,18 @@ chief:
       - compact_context_gate
       - fact_gate
       - benchmark_selection
-      - design_spec_approval
-      - layout_diversity_control
+      - premium_creative_spec_approval
       - hearing_and_media_alignment
+      - layered_text_verification_gate
+      - safe_mode_fallback_decision
       - root_cause_revision_routing
       - final_qa
+      - formal_delivery_approval
 
 agents:
   recruitment_analyst:
     file: .claude/agents/recruitment-analyst.md
-    role: recruitment_fact_and_ad_leverage_analysis
+    role: recruitment_fact_verbatim_and_ad_leverage_analysis
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -38,12 +41,14 @@ agents:
       - evidence
       - advertising_leverage
       - claim_boundary
+      - verbatim_claims
+      - critical_numeric_facts
       - job_reality
       - hearing_fact_separation
 
   creative_director:
     file: .claude/agents/creative-director.md
-    role: integrated_benchmark_led_design_spec_direction
+    role: premium_integrated_recruitment_creative_direction
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -51,17 +56,15 @@ agents:
       - strategy
       - benchmark_translation
       - copywriting
-      - art_direction
-      - layout_family_selection
-      - semantic_line_breaks
-      - emphasis_design
-      - typography_direction
-      - image_prompt
-      - renderer_ready_design_spec
+      - photo_art_direction
+      - integrated_typography_direction
+      - exact_text_contract
+      - premium_image_prompt
+      - safe_mode_fallback_direction
 
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
-    role: independent_delivery_blocking_quality_review
+    role: independent_premium_delivery_blocking_review
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -69,18 +72,18 @@ agents:
       - fact_claim_review
       - hearing_alignment
       - benchmark_alignment
-      - design_spec_fidelity
-      - layout_family_quality
+      - visual_text_readback
+      - ocr_assessment
       - advertising_impact
-      - typography_review
+      - integrated_typography_review
       - job_reality_review
       - generation_artifact_review
       - root_cause_routing
 
 historical_specialist_files:
   note: >-
-    Phase 1では直接実行しない。旧専門Agentの有用な知見はactive Creative Directorへ吸収する。
-    Agent数を戻す前にactive Agent定義・Design Spec・Layout Familyをチューニングする。
+    直接実行しない。旧Production/Copy/Art/Prompt Directorの有用知見はactive Creative Directorへ吸収する。
+    Agent数を増やす前にactive Agent・benchmark・Premium image promptを改善する。
   production_director: .claude/agents/production-director.md
   copy_director: .claude/agents/copy-director.md
   art_director: .claude/agents/art-director.md

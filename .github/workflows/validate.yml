@@ -27,3 +27,6 @@ jobs:
 
       - name: Validate architecture
         run: python scripts/validate_system.py
+
+      - name: Test Premium exact-text contract
+        run: python scripts/test_premium_contract.py
