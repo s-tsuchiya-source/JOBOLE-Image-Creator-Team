@@ -7,7 +7,7 @@ quality:
   fact_error_forces_revision: true
   hearing_violation_forces_revision: true
   benchmark_mismatch_forces_revision: true
-  design_spec_mismatch_forces_revision: true
+  text_integrity_error_forces_revision: true
   require_traceability: true
   require_compact_json_contract: true
 
@@ -17,23 +17,30 @@ quality:
     selection_owner: codex_cco
     python_may_auto_select: false
 
-  design_spec:
-    required_before_rendering: true
-    layout_config: configs/layouts.yaml
-    semantic_line_breaks_required: true
-    emphasis_must_exist_in_headline: true
-    fact_max: 3
+  premium_creative_spec:
+    required_before_generation: true
+    contract: services/creative_spec.py
+    required_text_block_typical_max: 5
+    required_text_block_hard_max: 6
     benchmark_ref_max: 3
     image_prompt_required: true
-    image_model_required_text: false
-    multiple_creatives_same_layout_requires_reason: true
+    image_model_required_text: true
+    no_extra_readable_text: true
+
+  text_verification:
+    local_ocr_optional: true
+    local_ocr_single_source_of_truth: false
+    claude_visual_readback_required: true
+    codex_final_visual_check_required: true
+    exact_required_text_match_required: true
+    critical_number_match_required: true
+    confirmed_extra_claim_blocks_delivery: true
 
   competition:
-    message_axis_candidate_min: 3
-    copy_candidate_min: 3
+    message_axis_candidate_min: 2
+    copy_candidate_min: 2
     visual_route_min: 2
     visual_route_max: 2
-    fact_chip_max: 3
 
   delivery_blockers:
     - wrong_role
@@ -41,16 +48,21 @@ quality:
     - unsupported_claim
     - hearing_media_mismatch
     - benchmark_quality_mismatch
-    - design_spec_fidelity_mismatch
-    - mechanical_template_repetition
-    - unreadable_or_inaccurate_text
+    - required_text_missing
+    - required_text_misspelled
+    - critical_number_mismatch
+    - invented_extra_text
+    - unreadable_typography
+    - poor_integrated_design_quality
     - major_generation_artifact
+    - unreviewed_candidate
 
   token_efficiency:
     compact_context_first: true
     raw_source_fallback_only: true
     compact_json_outputs: true
-    reuse_design_spec_downstream: true
+    reuse_creative_spec_downstream: true
+    ocr_report_summary_only: true
     root_cause_revision_only: true
     rerun_all_agents: false
 
@@ -63,6 +75,19 @@ quality:
     warning_yen_per_final_image: 330
     stop_and_escalate_yen_per_final_image: 400
     do_not_start_another_revision_at_or_above_yen: 330
+
+  fallback:
+    premium_text_retry_max: 2
+    safe_mode_after_repeated_text_error: allowed_by_codex_only
+    safe_mode_is_not_default: true
+
+  promotion:
+    candidate_first: true
+    formal_delivery_requires:
+      - creative_reviewer_pass
+      - codex_final_qa_pass
+      - fact_integrity_pass
+      - text_integrity_pass
 
   human_review:
     always_required_before_external_delivery: true
