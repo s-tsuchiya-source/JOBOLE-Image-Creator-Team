@@ -1,34 +1,53 @@
 render_modes:
-  premium_ai:
+  codex_imagegen:
     default: true
     purpose: >-
-      画像AIが人物・背景・装飾・日本語テキストを一体で生成し、完成物としてのデザイン品質を最優先する。
-    image_backend_env: PREMIUM_IMAGE_BACKEND
-    default_backend: openai
-    python_renders_required_text: false
+      Codex Integrated Creative DesignerがCodex runtimeのImageGen capabilityを直接使い、
+      人物・背景・装飾・日本語コピー・Typography・レイアウトを一体で完成広告として制作する。
+    generation_owner: codex_integrated_creative_designer
+    capability: codex_imagegen
+    python_generates_image: false
+    direct_openai_api_required: false
+    openai_api_key_required: false
     exact_text_contract_required: true
     local_ocr_optional: true
-    ai_visual_text_review_required: true
+    claude_visual_text_review_required: true
     codex_final_visual_text_review_required: true
+    candidate_registration: scripts/register_codex_candidate.py
+    silent_api_fallback_allowed: false
     max_generation_retries_for_text_error: 2
-    fallback_mode: safe_python
+    fallback_order:
+      - safe_python
+      - api_fallback_only_with_explicit_user_approval
 
   safe_python:
     default: false
     purpose: >-
-      日本語・数値の完全な再現性が最優先、またはPremium Modeで文字誤りが解消しない場合のフォールバック。
+      日本語・数値の完全な再現性が最優先、またはCodex ImageGenで必須文字誤りが解消しない場合の保険。
+      画像AIは文字なしビジュアル、Pythonは承認済みDesign Specを正確に描画する。
     image_backend_env: SAFE_IMAGE_BACKEND
     default_backend: openvino_ovms
     python_renders_required_text: true
     design_spec_contract: services/design_spec.py
     renderer: services/overlay_renderer.py
 
+  api_fallback:
+    default: false
+    purpose: >-
+      現在のCodex runtimeでImageGen capabilityが利用できず、かつユーザーが直接API利用を明示承認した場合のみ使用する非常用経路。
+    explicit_user_approval_required: true
+    image_backend_env: API_FALLBACK_IMAGE_BACKEND
+    default_backend: openai
+    openai_api_key_required: true
+    silent_activation_forbidden: true
+
 verification:
   text_integrity:
     layers:
+      - codex_designer_self_check
       - local_ocr_when_available
       - claude_visual_readback
-      - codex_final_visual_check
+      - codex_cco_final_visual_check
     local_ocr_is_single_source_of_truth: false
     any_confirmed_fact_error_blocks_delivery: true
     any_confirmed_required_text_error_blocks_delivery: true
