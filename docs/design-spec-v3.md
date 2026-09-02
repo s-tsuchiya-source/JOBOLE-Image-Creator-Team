@@ -1,79 +1,40 @@
-# Design Spec v3
+# Design Spec v3 — Safe Mode Fallback
 
-## Purpose
-画像AIへ日本語文字を描かせず、Claude Creative Directorが広告デザイン判断をJSON化し、Pythonが正確に再現する。
+> **Current primary architecture is Premium Integrated AI v4.**
+> See `docs/premium-integrated-ai-v4.md`.
 
-## Required flow
+このv3方式は削除していませんが、現在の標準制作経路ではありません。
+
+## When to use
+Codex CCOが次の場合に `safe_python` を選んだときだけ使用します。
+
+- Premium Modeで同じrequired Japanese text errorが繰り返される
+- 数値/条件の差し替え頻度が高く、文字の完全再現性が最優先
+- 緊急修正
+- Premium image backendを利用できない
+
+## Safe Mode Flow
 ```text
-creative-context.json
-+ Fact JSON
-+ benchmark max 3
+Fact / Hearing / Benchmark
 ↓
-Creative Director
+Creative Director Safe Design Spec
 ↓
-design_spec
+Image AI: text-free visual
 ↓
-Codex approval
+Python Design Spec Renderer
 ↓
-preview_design_spec.py
+Creative Reviewer
 ↓
-Codex preview approval
-↓
-generate_creative.py
+Codex Final QA
 ```
 
-## Layout families
-- numeric_impact
-- short_power_word
-- concept_message
-- work_scene
-- benefit_stack
-- emotional_message
+## Components kept for fallback
+- `services/design_spec.py`
+- `services/overlay_renderer.py`
+- `configs/layouts.yaml`
+- `scripts/preview_design_spec.py`
+- `scripts/test_design_renderer.py`
 
-## Example
-```json
-{
-  "version": "1.0",
-  "layout_family": "numeric_impact",
-  "accent_color": "#1F95B4",
-  "text_zone": "left",
-  "headline": {
-    "lines": ["月給33万750円〜", "42万8,750円"],
-    "emphasis": ["33万750円", "42万8,750円"]
-  },
-  "subcopy": {"text": "児童発達支援管理責任者"},
-  "facts": ["駅徒歩4分", "交通費全額支給"],
-  "cta": {"text": "詳しく見る"},
-  "image": {
-    "prompt": "realistic recruitment photo ...",
-    "negative_prompt": "text, watermark, malformed hands"
-  },
-  "benchmark_refs": ["R0001"],
-  "decorations": {
-    "accent_bar": true,
-    "rays": false,
-    "soft_shape": true,
-    "bottom_band": false
-  }
-}
-```
-
-## Responsibility boundary
-### Claude / Codex
-- Copy
-- semantic line breaks
-- emphasis
-- layout family
-- benchmark translation
-- visual direction
-- accent color
-
-### Python
-- validation
-- exact text rendering
-- font sizing within approved boundaries
-- layout execution
-- output size
-- file saving
-
-Python must not invent copy or change semantic line breaks unless the approved text physically cannot fit; in that case rendering fails and returns to Creative Director rather than silently shrinking into unreadable text.
+## Important
+Safe ModeのPython RendererをPremium Modeの品質上限にしません。
+標準は画像AIが写真・装飾・Typography・日本語文字を一体生成するv4です。
