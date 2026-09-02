@@ -1,9 +1,9 @@
 # AGENTS.md
 
 ## Goal
-ユーザーがVSCode Codexへ求人ファイルを渡すだけでも、**案件作成 → Fact確認 → benchmark選定 → Creative設計 → 画像生成 → Review → Google Drive保存**まで進められる状態を維持する。
+求人ファイルだけでも、**案件作成 → Fact確認 → benchmark選定 → Design Spec作成 → 文字なし画像生成 → Python高品質Typography → Review → Drive保存**まで進める。
 
-Phase 1では量産より納品品質を優先する。ただしAgentを増やして複雑化せず、Codex CCO + Claude 3専門家で運用する。
+Phase 1 v3ではAgent数を増やさず、Codex CCO + Claude 3専門家 + Design Spec Rendererで品質を上げる。
 
 ## User Intake
 必須:
@@ -13,89 +13,57 @@ Phase 1では量産より納品品質を優先する。ただしAgentを増や�
 - ヒアリングシート
 - 補足テキスト
 
-求人ファイルが正常に読めれば、ヒアリング無しでも制作可能。
-
 ## Source Priority
 1. 求人ファイル = Fact正本
 2. ヒアリング = 希望/媒体/枚数/NG/テイスト
 3. 補足テキスト = 追加希望
 4. `ORIGINAL_IMAGE_ROOT` = デザインbenchmark
 
-## Hard Rule: Project First
-Claude分析より先に:
+## Project First
+最初に案件を作成する。
 
 ```powershell
-python scripts/create_project_from_intake.py --job-posting "<求人>" --hearing "<hearing optional>"
+python scripts/create_project_from_intake.py --job-posting "<求人>" --hearing "<optional>"
 ```
 
-標準:
+標準保存先:
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ```
 
-取得:
-- PROJECT_ID
-- PROJECT_DIR
-- QUANTITY
-- QUANTITY_SOURCE
+正式成果物をDesktop/repo/tmpへ代替保存しない。
 
-ヒアリングCSVに `制作枚数` があれば、明示 `--quantity` が無い限り自動採用する。
-
-案件作成失敗時にDesktop/repo/tmpへ正式成果物を代替保存しない。
-
-## Hard Rule: Compact Context Before Claude
-案件作成後:
-
+## Compact Context Before Claude
 ```powershell
 python scripts/prepare_creative_context.py --project-id PJ-XXXX
 ```
 
-生成:
-- `creative-context.json`
-- source index/bundle
-- original_image catalog
-- original_image contact sheet
-- resolved output spec
-
-Claudeへの一次入力はcompact context。raw CSVはFact疑義時だけ読む。
+`creative-context.json` を一次入力にする。raw CSVはFact疑義のみ。
 
 ## Benchmark Library
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
 ```
 
-`.env`:
-```env
-ORIGINAL_IMAGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
-REFERENCE_SHORTLIST_MAX=3
-```
+Pythonはcatalog/contact sheetだけ作り、Codex CCOが最大3件を選ぶ。
 
-Pythonはcatalog/contact sheetだけ作る。最終benchmark選定はCodex CCO。
-Creative Directorへ渡す参考は最大3件。
-
-## Hearing Overrides Generic Defaults
-ヒアリングに媒体・サイズ・枚数等の明示がある場合はgeneric defaultより優先。
+## Hearing Priority
+ヒアリング指定はgeneric defaultより優先。
 
 例:
 ```text
-JOBOLE（4:3） -> configs/media.yaml -> 1200x900 / 4:3
+JOBOLE（4:3） -> 1200x900 / 4:3
 ```
-
-4:3指定案件を1200x628で生成しない。
 
 ## AI Organization
 ### Codex CCO
 最高責任者。
-- Project確認
-- compact context gate
 - Fact Gate
 - Benchmark Gate
-- hearing/media alignment
-- Direction Gate
+- Design Spec Gate
+- Layout Familyの使い分け
 - Revision Routing
 - Final QA
-
-詳細: `.codex/chief-creative-officer.md`
 
 ### Recruitment Analyst
 - exact role/employment type
@@ -103,29 +71,75 @@ JOBOLE（4:3） -> configs/media.yaml -> 1200x900 / 4:3
 - Advertising Leverage
 - Claim Boundary
 - Job Reality
-- hearingとFactの分離
-
-別職種・別雇用形態を勝手に追加しない。
 
 ### Creative Director
-- benchmark translation
 - message strategy
 - Copy
-- Visual Route
+- benchmark translation
 - Art Direction
-- Typography Direction
+- Layout Family選択
+- 意味改行
+- 強調語/数字
 - Image Prompt
-
-原則route最大2。人物写真benchmarkなら理由なく抽象イラストへ逸脱しない。
+- renderer-ready Design Spec
 
 ### Creative Reviewer
-- Fact/Hearing/Benchmark blocker
+- Fact/Hearing/Benchmark
+- Design Spec fidelity
+- Layout Family品質
 - 1-second / 3-second test
-- Copy/Typography/Job Reality
+- Typography
+- Job Reality
 - Generation Artifact
-- Root Cause Routing
 
-読めるだけでPASSしない。
+## Design Spec First
+方式Aの正式経路:
+
+```text
+Creative Director
+↓
+Codex Approval
+↓
+02_direction/CR001-design-spec.json
+↓
+Image AI = 文字なし背景
+↓
+Python = Design Spec通りの日本語描画
+```
+
+Pythonへデザイン判断を委譲しない。
+
+## Layout Families
+`configs/layouts.yaml`
+
+- numeric_impact
+- short_power_word
+- concept_message
+- work_scene
+- benefit_stack
+- emotional_message
+
+複数枚案件で全て同じFamilyへ流し込まない。訴求に合わせて変える。
+
+## Design Spec Contract
+`services/design_spec.py`
+
+必須:
+- layout_family
+- accent_color
+- text_zone
+- headline.lines
+- headline.emphasis
+- image.prompt
+
+任意:
+- subcopy
+- facts 最大3
+- CTA
+- benchmark_refs 最大3
+- decorations
+
+Headlineの意味改行はCreative Directorが決める。Pythonの自動折返しは最終fallbackのみ。
 
 ## Fixed Workflow
 ```text
@@ -135,7 +149,7 @@ Codex CCO
 ↓
 Project creation
 ↓
-Python compact context + original_image catalog/contact sheet
+Python compact context + benchmark catalog/contact sheet
 ↓
 Recruitment Analyst
 ↓
@@ -145,9 +159,13 @@ Codex Benchmark Gate
 ↓
 Creative Director
 ↓
-Codex Direction Gate
+Codex Design Spec Gate
 ↓
-Image Generation + deterministic Japanese Typography
+02_direction/<creative-id>-design-spec.json
+↓
+Image Generation (no required text)
+↓
+Python Design Spec Renderer
 ↓
 Creative Reviewer
 ↓
@@ -156,83 +174,67 @@ Codex Final QA
 Human Final Approval
 ```
 
-## Output Contract
-正式成果物:
+## Formal Output
 ```text
+02_direction/<creative-id>-design-spec.json
 03_batches/<creative-id>/v001/background.png
 03_batches/<creative-id>/v001/image-prompt.txt
+03_batches/<creative-id>/v001/design-spec.json
 05_delivery/<creative-id>.png
 05_delivery/<creative-id>-copy.md
 ```
 
-`generate_creative.py` は:
-- `--project-id` 必須
-- `creative-context.json` 必須
-- hearing-resolved aspect ratioを尊重
-- Fact最大 `FACT_CHIP_MAX`
-- デフォルト `benchmark_recruit`
-
-## Typography
-日本語重要文言を画像AIへ描かせない。
-
-```text
-Image AI -> 人物/職場/仕事/構図/余白
-Python -> 正確な日本語Typography
+## Generate
+```powershell
+python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 ```
 
-標準:
-- `benchmark_recruit`: 大きなHeadline + 1色アクセント + 補助帯 + 少数Fact
-- `modern_recruit`: 比較用の従来レイアウト
+標準では `02_direction/CR001-design-spec.json` を自動使用する。
 
 ## Token Efficiency
 - compact context first
 - raw source fallback only
-- Claude出力はcompact JSON
+- Claude出力 compact JSON
 - benchmark最大3
 - route最大2
 - Fact最大3
+- Design SpecをRenderer/Reviewerで再利用
 - Revision最大2
 - root cause工程だけ再実行
-- 同じCSV全文を複数Agentへ繰り返し渡さない
 
 ## Python Responsibilities
 やってよい:
 - Project作成
-- CSV/docx/xlsx/pdf抽出
+- file extraction
 - compact context
 - benchmark catalog/contact sheet
-- 媒体サイズ解決
-- 画像生成
-- Typography
-- copy.md
-- リサイズ/保存
+- media size resolution
+- image generation
+- Design Spec validation
+- exact Japanese rendering
+- copy.md / save / resize
 
 やってはいけない:
+- Target/訴求/Copy判断
 - benchmark最終選定
-- Target/訴求/Copy/Art Directionの判断
-- Claude承認
-- Codex Final QA
-- AI組織自動オーケストレーション
+- Layout Family選定
+- Headline意味改行判断
+- Art Direction判断
+- Final QA
 
 ## Quality Blockers
-- wrong role
-- wrong employment type
+- wrong role/employment type
 - unsupported claim
 - hearing/media mismatch
 - benchmark quality mismatch
-- abstract/generic visual that loses job reality without approved reason
-- mechanical typography
+- Design Spec mismatch
+- mechanical template repetition
 - inaccurate/unreadable text
 - major generation artifact
 
-## Success Condition
-納品判断できる実画像を案件内へ作り、人間が:
-- Fact
-- hearing alignment
-- benchmark alignment
-- Copy
-- Typography
-- Job Reality
-- Ad Impact
+## Local Renderer Test
+```powershell
+python scripts/test_design_renderer.py
+```
 
-を評価できること。
+6 Layout Familyを画像APIなしで確認できる。
