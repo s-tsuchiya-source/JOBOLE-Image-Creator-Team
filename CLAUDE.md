@@ -8,123 +8,122 @@ Active:
 - Creative Director
 - Creative Reviewer
 
+## v4 Principle
+標準はPremium Integrated AI。
+画像AIが人物・背景・装飾・Typography・日本語文字まで一体生成する。
+
+Claudeは:
+- Factを安全に固定
+- Copy/Art/Typographyを設計
+- Exact Text Contractを作成
+- 完成画像を目視Review
+
+PythonはPremium Modeでデザイン判断や文字後載せをしない。
+
 ## Input Contract
-一次入力は `00_request/normalized/creative-context.json`。
-raw求人/ヒアリングはFact疑義だけ確認する。
+一次入力:
+- `00_request/normalized/creative-context.json`
+- Codexが選んだbenchmark最大3件
+
+raw sourceはFact疑義のみ。
 
 ## Source Priority
-1. 求人ファイル = Fact正本
-2. ヒアリング = 希望/媒体/枚数/NG/テイスト
-3. 補足テキスト
-4. Codex選定 `original_image` benchmark 最大3件
-
-## Benchmark
-参考はコピー対象ではなく、以下の広告文法を学ぶ。
-- composition
-- photo density
-- headline scale
-- line break rhythm
-- color system
-- decoration amount
-- whitespace
-- overall energy
+1. 求人Fact
+2. Hearing
+3. Supplementary text
+4. Codex-selected benchmark
 
 ## Recruitment Analyst
-Fact/Evidence/Claim Boundary/Job Realityのみ。
-別職種・別雇用形態・未記載条件を追加しない。
-返答はcompact JSON。
+`.claude/agents/recruitment-analyst.md`
+
+必須:
+- exact role/employment type
+- Fact/Evidence
+- verbatim claims
+- critical numeric facts
+- Claim Boundary
+- Job Reality
+
+Copy/Artを作らない。
 
 ## Creative Director
-Creative Directorは**Design Specの作者**。
+`.claude/agents/creative-director.md`
 
-担当:
+Premiumで担当:
 - Strategy
 - Copy
-- Benchmark Translation
-- Layout Family Selection
-- Semantic Line Breaks
-- Emphasis Design
-- Art Direction
-- Image Prompt
-- renderer-ready Design Spec
+- benchmark translation
+- Photo/Art Direction
+- integrated Typography
+- Exact Text Contract
+- final-banner image prompt
 
-`configs/layouts.yaml` から選ぶ:
-- numeric_impact
-- short_power_word
-- concept_message
-- work_scene
-- benefit_stack
-- emotional_message
-
-重要:
-- Headline改行は意味単位で自分が決める。
-- 強調語/数字を `headline.emphasis` で指定する。
-- 同案件の全画像を同じLayout Familyへ流し込まない。
-- Pythonへ「いい感じに配置」を任せない。
-- 重要日本語を画像AIへ描かせない。
-
-返答はcompact JSONで `design_spec` を含める。
+出力は `creative_spec`。
+Python Renderer向け固定レイアウトを主成果物にしない。
 
 ## Creative Reviewer
-完成画像を以下でblockする。
-- Fact/Hearing違反
-- Benchmark乖離
-- Design Spec不一致
-- Layout Familyの狙い不成立
-- 機械的テンプレ反復
-- 1秒/3秒テスト失敗
-- 生成破綻
+`.claude/agents/creative-reviewer.md`
 
-返答はcompact JSON。
+必須:
+- candidate画像を直接見る
+- required textを画像から転記
+- expected/observed/exact_matchを返す
+- OCRがあれば補助的に評価
+- Fact/Hearing/Benchmark/Design Qualityを審査
 
-## Design Spec Contract
-`services/design_spec.py`
+OCRを鵜呑みにしない。
 
-Creative Directorが最低限決める:
-```text
-layout_family
-accent_color
-text_zone
-headline.lines
-headline.emphasis
-subcopy
-facts
-cta
-image.prompt
-image.negative_prompt
-benchmark_refs
-decorations
-```
+## Exact Text Rules
+画像AIへ載せる文字は `text_contract` が正本。
 
-Codex承認後:
-```text
-02_direction/<creative-id>-design-spec.json
-```
-へ保存する。
+禁止:
+- 言い換え
+- 数字変更
+- 職種追加
+- 雇用形態追加
+- 余計な求人コピー追加
+- 偽ロゴ/ランダム文字を許容
 
-Python RendererはDesign Specを再解釈せず描画する。
+Visual line breakは許可されても文字自体は変えない。
+
+## Premium Review
+Reviewerは最低限:
+- role
+- employment type
+- salary/number
+- access
+- required headline
+
+を画像上で確認する。
+
+1文字でも求人意味を変える誤りはBlock。
+
+## Safe Mode
+Premiumで同じ文字エラーが繰り返され、Codexが明示した場合だけSafe Modeへ移る。
+
+Safe Modeでは旧Design Spec/Python Rendererを使用。
 
 ## Token Efficiency
-- compact context first
+- compact JSON only
 - raw source fallback only
-- JSON only
 - benchmark max 3
-- visual route max 2
-- fact max 3
-- Design SpecをRenderer/Reviewerで再利用
-- 局所問題だけ再実行
+- route max 2
+- required text typical max 5, hard max 6
+- Creative Specを生成/Reviewで再利用
+- OCR全文を長く引用しない
+- root cause工程だけやり直す
 
 ## Absolute Rules
-1. Codex CCOの指示範囲だけ担当。
-2. 求人にないFactを作らない。
-3. hearing不足だけで停止しない。
-4. hearing指定を無視しない。
-5. benchmark選定はCodexに従う。
+1. Codex CCOの担当範囲に従う。
+2. Factを創作しない。
+3. Hearing不足だけで停止しない。
+4. Hearing明示指定を優先。
+5. Benchmark選定はCodexに従う。
 6. CreatorとReviewerを混ぜない。
-7. Reviewerは最終承認者ではない。
-8. 数値/給与/休日/資格/雇用形態は厳格。
-9. Design Spec / copy.md / 画像内文言を一致させる。
-10. 出力を短く、判断基準を厳しくする。
+7. 数字/給与/休日/資格/雇用形態を厳格に扱う。
+8. Candidateを納品物とみなさない。
+9. Reviewer PASSだけで05_deliveryへ昇格させない。
+10. 判断は厳しく、出力は短くする。
 
 ## Workflow
 ```text
@@ -138,20 +137,23 @@ Codex Fact Gate
 ↓
 Codex Benchmark Gate
 ↓
-Creative Director -> Design Spec
+Creative Director Premium Creative Spec
 ↓
-Codex Design Spec Gate
+Codex Spec Gate
 ↓
-Image AI: no required text
+Premium Image AI candidate
 ↓
-Python Design Spec Renderer
+Optional OCR
 ↓
-Creative Reviewer
+Creative Reviewer visual text readback
 ↓
 Codex Final QA
+↓
+Formal Promotion
 ```
 
 ## Data Management
-- 実案件データ・求人・hearing・画像はGoogle Drive案件フォルダ。
-- benchmark画像は `original_image`。
-- GitHubには汎用ルール/Agent/コードだけ。
+- 実案件はGoogle Drive Project folder。
+- Benchmarkは `original_image`。
+- GitHubには汎用コード/Agent/ルールのみ。
+- 実求人データをGitHubへコミットしない。
