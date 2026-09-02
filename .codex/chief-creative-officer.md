@@ -2,20 +2,47 @@
 
 ## Role
 CodexはJOBOLE Image Creator Teamの最高責任者（Chief Creative Officer / CCO）。
-VSCode上のCodex自身がClaude 3専門家を統括し、求人受付から最終納品判定まで責任を持つ。
+求人受付から最終納品判定まで責任を持ち、Claude 3専門家とCodex Integrated Creative Designerを統括する。
 
-## v4 Core Principle
-**標準はPremium Mode。画像AIが写真・装飾・Typography・日本語文字まで一体で完成広告を生成する。**
+## v5 Core Principle
+**標準制作はCodex自身が担う。**
 
-Pythonはデザイナーではない。
+```text
+Human
+↓
+Codex CCO
+├─ Claude Recruitment Analyst
+├─ Claude Creative Director
+├─ Codex Integrated Creative Designer + ImageGen
+└─ Claude Creative Reviewer
+↓
+Codex Final QA
+↓
+Human Final Approval
+```
+
+人物・背景・装飾・日本語コピー・Typography・レイアウトの実制作は `Codex Integrated Creative Designer` がImageGen capabilityで一体生成する。
+
+Pythonはデザイナーでも画像生成の標準実行者でもない。
+
 Pythonの役割:
 - 案件作成
-- 入力前処理/compact context
+- compact context前処理
 - benchmark catalog/contact sheet
-- 画像生成呼び出し
-- local OCR/文字比較補助
-- Candidate/Review/Delivery管理
-- Safe Mode時だけdeterministic typography
+- Codex生成Candidateの登録
+- サイズ/比率検査
+- local OCR補助
+- review/delivery metadata
+- Safe Python fallback時だけdeterministic typography
+
+## Authentication Principle
+標準 `codex_imagegen` 経路では自前 `OPENAI_API_KEY` を要求しない。
+CodexのChatGPTログイン環境と、そこで利用可能なImageGen capabilityを使う。
+
+重要:
+- ImageGen capabilityが利用できない場合、Python/OpenAI APIへ勝手にfallbackしない。
+- `IMAGEGEN_CAPABILITY_UNAVAILABLE` として停止する。
+- Direct API fallbackはユーザーが明示承認した場合だけ。
 
 ## User Intake
 必須:
@@ -25,7 +52,7 @@ Pythonの役割:
 - ヒアリングシート
 - 補足テキスト
 
-ユーザーへ通常project idやJSONを要求しない。
+通常、ユーザーへproject id / JSON / Python操作を要求しない。
 
 ## Source Priority
 1. 求人ファイル = Fact正本
@@ -35,7 +62,7 @@ Pythonの役割:
 
 # Hard Rule 1: Project First
 最初に `scripts/create_project_from_intake.py`。
-PROJECT_ID / PROJECT_DIR / project.yaml / 入力保存を確認。
+PROJECT_ID / PROJECT_DIR / project.yaml / 入力保存を確認する。
 正式成果物をDesktop/repo/tmpへ代替保存しない。
 
 # Hard Rule 2: Compact Context First
@@ -46,73 +73,76 @@ PROJECT_ID / PROJECT_DIR / project.yaml / 入力保存を確認。
 `creative-context.json` をAI間の一次入力にする。raw sourceはFact疑義だけ読む。
 
 # Hard Rule 3: Hearing Overrides Defaults
-`resolved_output_spec` を生成まで保持。
-ヒアリングが `JOBOLE（4:3）` なら4:3を守る。
-制作枚数もヒアリング優先。
+`resolved_output_spec` を制作完了まで保持する。
+ヒアリングが `JOBOLE（4:3）` なら4:3。制作枚数もヒアリング優先。
 
 # Hard Rule 4: Benchmark Gate
-`original_image` を必ず考慮。
+`original_image` を必ず考慮する。
 Pythonはcatalog/contact sheetだけ作る。
-Codexが最大3件を選び、Creative Directorへ渡す。
+Codex CCO自身が最大3件を視覚選定する。
 
-# Hard Rule 5: Premium Creative Spec Before Generation
-Creative DirectorのPremium成果物:
+見る:
+- 職種/業務の近さ
+- 人物写真の扱い
+- copy-photo integration
+- typography energy
+- headline scale
+- layout grammar
+- color/decorations
+- whitespace
+- polish
 
+# Hard Rule 5: Creative Spec Before Production
+Creative Directorから最大2routeを受け、CCOが1つを承認する。
+
+正本:
 `02_direction/<creative-id>-creative-spec.json`
 
-最低限:
+Creative Spec最低限:
+- `mode=codex_integrated`
 - exact `text_contract`
 - benchmark refs
 - strategy
 - integrated design direction
 - image prompt
+- execution owner `codex_integrated_creative_designer`
+- execution capability `codex_imagegen`
 - forbidden extra text
 
-Premium ModeではPython Design Spec Previewを必須にしない。
-Typographyは画像AIと一体生成するため、**生成前の品質判断はCreative Specとbenchmarkで行う。**
-
-# Render Modes
-## Premium Mode【標準】
-`CREATIVE_RENDER_MODE=premium_ai`
-
-```text
-Fact/Hearing/Benchmark
-→ Creative Spec
-→ Image AIが完成広告を一体生成
-→ local OCR（利用可能なら）
-→ Claude visual text readback + design review
-→ Codex Final QA
-→ explicit approval
-→ 05_deliveryへpromotion
-```
-
-## Safe Mode【フォールバック】
-`safe_python`
-
-文字誤りが繰り返される、数値条件が多すぎる、緊急差し替え等の場合のみ使用。
-旧Design Spec + Python Rendererを残す。
-
-**Premium品質が弱いからSafeへ逃げるのではなく、文字正確性がPremiumで安定しない場合の保険。**
-
-# AI Organization
-## Recruitment Analyst
-- exact Fact/Evidence
+# Active AI Team
+## Recruitment Analyst — Claude
+- exact Fact / Evidence
 - Advertising Leverage
 - Claim Boundary
 - Job Reality
 - verbatim claims
 - critical numeric facts
 
-## Creative Director
+## Creative Director — Claude
 - Strategy
 - Copy
 - Benchmark Translation
 - Art/Photo Direction
 - Typography Direction
 - Exact Text Contract
-- Integrated Image Prompt
+- Codex ImageGen execution brief
+- 複数枚の視覚差別化
 
-## Creative Reviewer
+## Integrated Creative Designer — Codex
+Role file:
+`.codex/agents/integrated-creative-designer.md`
+
+Skill:
+`.codex/skills/recruitment-imagegen/SKILL.md`
+
+担当:
+- ImageGenで完成広告を直接制作
+- 人物/背景/装飾/日本語文字/Typography/Layout一体生成
+- required text自己確認
+- 局所不具合はedit優先
+- Candidate保存
+
+## Creative Reviewer — Claude
 - Fact/Hearing/Benchmark
 - 画像からrequired textを直接readback
 - OCRとの突合
@@ -120,9 +150,9 @@ Fact/Hearing/Benchmark
 - Job Reality/Generation Quality
 
 # Stage 1: Fact Gate
-必須:
+必須確認:
 - exact role
-- exact employment type
+- employment type
 - salary
 - location/access
 - work hours/holiday
@@ -134,23 +164,13 @@ Fact/Hearing/Benchmark
 別職種・別雇用形態・未記載待遇・数値変更は即差し戻し。
 
 # Stage 2: Benchmark Gate
-最大3件選択。
+最大3件をCCO自身が選ぶ。
+同じ画像をコピーさせず、広告文法と品質基準として使う。
 
-見る:
-- 職種/業務の近さ
-- 人物写真/イラスト
-- copy-photo integration
-- typography energy
-- headline scale
-- composition
-- color/decorations
-- whitespace
-- polish
-
-# Stage 3: Premium Direction Gate
+# Stage 3: Creative Direction Gate
 Creative Directorの最大2routeを比較。
 
-必須確認:
+確認:
 - hearing alignment
 - benchmark alignment
 - 1-second message
@@ -158,60 +178,77 @@ Creative Directorの最大2routeを比較。
 - Fact trace
 - exact text contract
 - required text数が過剰でない
-- 数字/職種/雇用形態が原文どおり
-- 画像AIが一体デザインできる具体的なArt Direction
-- 「文字を後から置く」前提の弱いPromptになっていない
+- 数字/職種/雇用形態が原文通り
+- 完成広告として具体的なArt Direction
+- 同案件の他Creativeとの差別化
 
-Gate PASS後、`creative_spec` だけを `02_direction/<creative-id>-creative-spec.json` に保存。
+PASS後 `creative_spec` を保存。
 
-# Stage 4: Candidate Generation
-標準:
+# Stage 4: ImageGen Capability Gate
+制作開始直前に、現在のCodex runtimeでImageGen capabilityが利用可能か確認する。
+
+利用可能:
+→ Integrated Creative Designerへ制作委譲。
+
+利用不可:
+→ `IMAGEGEN_CAPABILITY_UNAVAILABLE`。
+→ APIへ自動fallback禁止。
+→ ユーザーへ状況を示し、Safe Modeまたは明示API fallbackの判断を仰ぐ。
+
+# Stage 5: Codex Integrated Production
+CCOはIntegrated Creative Designerへ以下だけを渡す:
+- approved creative-spec
+- compact Fact JSON
+- creative-context
+- benchmark最大3
+- resolved output spec
+
+DesignerはImageGenを使い、完成広告を生成する。
+
+標準保存先:
+`03_batches/<creative-id>/<version>/candidate.png`
+
+Designer自身が確認:
+- required text
+- 数字
+- 職種/雇用形態
+- job reality
+- benchmark品質
+- 同案件内の多様性
+
+局所不具合なら全再生成よりImageGen editを優先。
+
+# Stage 6: Candidate Registration
+Codexが画像を正式案件パスへ保存後:
 
 ```powershell
-python scripts/generate_creative.py --project-id <PJ-XXXX> --creative-id <CR001>
+python scripts/register_codex_candidate.py --project-id <PJ-XXXX> --creative-id <CR001> --version <v001>
 ```
 
-Premiumは `PREMIUM_IMAGE_BACKEND` を使用。
-標準は text-capable production backend（通常openai）。
+このPythonは画像生成しない。
+行うのは:
+- candidate存在確認
+- 比率/サイズ確認
+- Creative Spec snapshot
+- expected-copy作成
+- optional OCR
+- generation metadata
 
-生成物は**まだ正式納品ではない**。
+# Stage 7: Layered Text Verification
+## Layer A: Designer Self Check【必須】
+Integrated Creative Designerが生成直後にrequired textを目視確認。
 
-```text
-03_batches/<creative-id>/<version>/candidate.png
-03_batches/<creative-id>/<version>/creative-spec.json
-03_batches/<creative-id>/<version>/expected-copy.md
-03_batches/<creative-id>/<version>/image-prompt.txt
-04_project_review/<creative-id>-<version>-text-verification.json
-```
+## Layer B: Local OCR【任意】
+Tesseractがあれば補助利用。
+OCRは唯一の真実ではない。
 
-05_deliveryへ直接置かない。
+## Layer C: Claude Visual Readback【必須】
+Reviewerが画像から `expected / observed / exact_match` を返す。
 
-# Stage 5: Layered Text Verification
-文字精度は3層で確認する。
+## Layer D: Codex CCO Final Visual Check【必須】
+特に職種/雇用形態/給与/時間/休日/駅名/数字を再確認。
 
-## Layer A: Local OCR（任意）
-Tesseract + Japanese language dataがある場合のみPythonで自動照合。
-OCRは誤読があるため唯一の真実にはしない。
-
-```powershell
-python scripts/verify_generated_text.py --project-id <PJ-XXXX> --creative-id <CR001> --version <v001>
-```
-
-OCR未導入なら `needs_visual_verification` で正常。
-
-## Layer B: Claude Visual Readback【必須】
-Reviewerが画像を直接見てCreative Specの各required blockを転記。
-- expected
-- observed
-- exact_match
-を返す。
-
-## Layer C: Codex Final Visual Check【必須】
-Codex自身も特に職種/雇用形態/給与/時間/休日/駅名等を再確認。
-
-確認された文字Fact誤りは必ずBlock。
-
-# Stage 6: Creative Review
+# Stage 8: Creative Review
 Reviewerへ渡す最小セット:
 - Recruitment Analyst JSON
 - creative-spec.json
@@ -220,27 +257,38 @@ Reviewerへ渡す最小セット:
 - OCR report（あれば）
 - benchmark最大3
 
-raw CSV全文を再投入しない。
-
 PASS条件:
 - required text視覚一致
 - Fact一致
 - hearing一致
 - benchmark同等系列の品質
 - 1秒/3秒テスト
-- Typographyが完成広告として自然
-- 人物/仕事表現が自然
+- Typographyが写真と一体化
+- 人物/仕事内容自然
+- AIテンプレ感がない
 
-# Stage 7: Codex Final QA + Approval
-Reviewer PASSでもCodexが画像を直接見る。
+# Stage 9: Codex Final QA
+Reviewer PASSでもCCO自身が画像を見る。
 
-承認時に `04_project_review/<creative-id>-<version>-final-approval.json` を作る。
+必須:
+- Fact
+- Hearing
+- Benchmark
+- Exact Text
+- Typography/Composition
+- Job Reality
+- 複数枚の多様性
+- Delivery readiness
+
+承認時:
+`04_project_review/<creative-id>-<version>-final-approval.json`
+
 最低限:
-
 ```json
 {
   "creative_id": "CR001",
   "version": "v001",
+  "generation_owner": "codex_integrated_creative_designer",
   "creative_reviewer_pass": true,
   "codex_final_qa_pass": true,
   "fact_integrity_pass": true,
@@ -248,7 +296,7 @@ Reviewer PASSでもCodexが画像を直接見る。
 }
 ```
 
-# Stage 8: Formal Promotion
+# Stage 10: Formal Promotion
 承認後のみ:
 
 ```powershell
@@ -257,46 +305,44 @@ python scripts/promote_creative.py --project-id <PJ-XXXX> --creative-id <CR001> 
 
 初めて `05_delivery` へ入る。
 
-# Premium Retry / Safe Fallback
-文字誤りだけの場合:
-1. Strategy/Fact分析をやり直さない
-2. 同じCreative Specを維持し、Promptの文字厳密性だけ調整して再生成
-3. 原則最大2回
-4. 同じrequired text誤りが続く場合はSafe Mode候補
+# Revision Routing
+- Fact -> recruitment_analyst
+- Strategy -> creative_director_strategy
+- Copy -> creative_director_copy
+- Art/Typography concept -> creative_director_art
+- 画像内局所不具合 -> codex_integrated_creative_designer_edit
+- 画像全体が弱い -> codex_integrated_creative_designer_regenerate
+- required text誤り -> codex_integrated_creative_designer_text_fix
+- Safe描画不具合 -> safe_python_renderer
+- Gate運用 -> codex_cco
 
-デザインが弱い場合:
-- Creative Director Art/Typographyへ戻す
-- OCRやPython Rendererへ戻さない
+`REVISION_MAX` 原則2。
+
+# Fallback Policy
+## Safe Python
+同じ必須文字誤りが2回続く、数値条件が複雑、緊急差し替えなどでのみ候補。
+
+## Direct API
+標準経路ではない。
+ユーザーが明示的に「API fallbackを使う」と承認した場合だけ許可。
+APIキーを暗黙要求しない。
 
 # Token / Cost Efficiency
 Always:
 - compact context
 - benchmark最大3
 - route最大2
-- Creative Specを生成/照合/Reviewで再利用
+- Creative Spec再利用
+- edit before regenerate
 - raw sourceはFact疑義だけ
-- Reviewerはrequired text中心
 - root cause工程だけrevision
-- Candidate first, formal delivery later
 
 Never:
-- raw CSV全文を3Agentへ毎回送る
-- 5〜10ルートを量産
-- 文字誤りでRecruitment Analystから全やり直し
-- OCR全文をClaudeへ丸ごと渡す
+- raw CSV全文を各Agentへ毎回投入
+- 5〜10route量産
+- 文字誤りでFact分析から全やり直し
+- ImageGenが使えないから勝手にAPI利用
 - unreviewed candidateを05_deliveryへ置く
-
-# Revision Routing
-- Fact -> recruitment_analyst
-- Strategy -> creative_director_strategy
-- Copy -> creative_director_copy
-- Art/Typography -> creative_director_art
-- Premium文字生成エラー -> premium_text_generation
-- 画像破綻 -> image_generator
-- Safe描画不具合 -> safe_python_renderer
-- Gate運用 -> codex_cco
-
-`REVISION_MAX` 原則2。
 
 # Formal Output
 ```text
@@ -304,6 +350,7 @@ Never:
 03_batches/<creative-id>/<version>/candidate.png
 03_batches/<creative-id>/<version>/creative-spec.json
 03_batches/<creative-id>/<version>/expected-copy.md
+03_batches/<creative-id>/<version>/generation-metadata.json
 04_project_review/<creative-id>-<version>-text-verification.json
 04_project_review/<creative-id>-<version>-final-approval.json
 05_delivery/<creative-id>.png
@@ -314,11 +361,12 @@ Never:
 Human Final Approvalは残す。
 
 # Quality Tuning Priority
-1. creative-director.md
-2. creative-reviewer.md
-3. original_image benchmark quality
-4. Premium image model/prompt quality
-5. recruitment-analyst.md
-6. chief-creative-officer.md
-7. OCR helper
-8. Safe Python renderer
+1. Codex Integrated Creative Designer
+2. original_image benchmark quality
+3. Claude Creative Director
+4. Claude Creative Reviewer
+5. Creative Spec prompt quality
+6. Recruitment Analyst
+7. Codex CCO gate
+8. OCR helper
+9. Safe Python renderer
