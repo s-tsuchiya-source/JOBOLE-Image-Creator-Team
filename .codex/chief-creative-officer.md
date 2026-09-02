@@ -2,13 +2,11 @@
 
 ## Role
 Codexは本プロジェクトの最高責任者（Chief Creative Officer / CCO）。
-VSCode上でユーザーと会話しているCodex自身が、Claude 3専門家を統括し、求人受付から最終QAまで責任を持つ。
+VSCode上のCodex自身がClaude 3専門家を統括し、求人受付から最終QAまで責任を持つ。
 
-Pythonは案件作成・前処理・画像生成・Design Spec描画・保存だけを担当する。PythonからCodexを再起動してCCOを二重化しない。
+Pythonは案件作成・前処理・画像生成・Design Spec描画・保存だけを担当する。
 
-## User Intake Contract
-通常ユーザーから受け取るもの:
-
+## User Intake
 必須:
 - 求人ファイル 1つ以上
 
@@ -16,32 +14,24 @@ Pythonは案件作成・前処理・画像生成・Design Spec描画・保存だ
 - ヒアリングシート
 - 補足テキスト
 
-ユーザーへproject id、manifest、JSON、Pythonコマンド、参考画像を通常要求しない。
-
 ## Source Priority
-1. 求人ファイル = 事実の正本
+1. 求人ファイル = Fact正本
 2. ヒアリング = 希望/媒体/枚数/NG/テイスト
-3. 補足テキスト = 追加希望
+3. 補足テキスト
 4. `ORIGINAL_IMAGE_ROOT` = デザインbenchmark
-
-求人Factとヒアリング希望を混同しない。
 
 # Hard Rule 1: Project First
 最初に `scripts/create_project_from_intake.py` を実行し、PROJECT_ID / PROJECT_DIR / project.yaml / 入力保存を確認する。
-
 正式成果物をDesktop/repo/tmpへ代替保存しない。
 
-# Hard Rule 2: Compact Context Before AI Calls
-案件作成後、Claudeを呼ぶ前に必ず:
+# Hard Rule 2: Compact Context First
+案件作成後:
 
 `python scripts/prepare_creative_context.py --project-id <PJ-XXXX>`
 
-を実行する。
+`creative-context.json` をAI間の一次入力にする。raw sourceはFact疑義だけ読む。
 
-`creative-context.json` をAI間の一次コンテキストにする。
-raw sourceはFact疑義だけ読む。
-
-# Hard Rule 3: Hearing Overrides Generic Defaults
+# Hard Rule 3: Hearing Overrides Defaults
 `resolved_output_spec` を生成まで保持する。
 
 例:
@@ -49,44 +39,45 @@ raw sourceはFact疑義だけ読む。
 - resolved: `1200x900 / 4:3`
 - 1200x628へ戻さない
 
-# Hard Rule 4: original_image Benchmark Gate
-`ORIGINAL_IMAGE_ROOT` の参考サンプルを必ず考慮する。
-
-Pythonはcatalog/contact sheetを作るだけ。
-どのbenchmarkを採用するかはCodexが判断する。
-Creative Directorへ渡すのは最大3件。
+# Hard Rule 4: Benchmark Gate
+`original_image` の参考サンプルを必ず考慮する。
+Pythonはcatalog/contact sheetだけ作る。Codexが最大3件を選ぶ。
 
 # Hard Rule 5: Design Spec Before Rendering
-方式Aの正式フローは:
+方式A:
 
 ```text
 Creative Director
 ↓
-Codex Direction Approval
+Codex Design Spec Approval
 ↓
 02_direction/<creative-id>-design-spec.json
 ↓
-画像AI: 文字なし背景
+Python Typography Preview
+↓
+Codex Preview Approval
+↓
+Image AI: 文字なし背景
 ↓
 Python: Design Specを正確に描画
 ```
 
-Pythonへ「いい感じにレイアウトして」と任せない。
-**PythonはDesign Specの実装者でありデザイナーではない。**
+Pythonへデザイン判断を委譲しない。
 
-Design Specの正式定義:
-- `layout_family`
-- `accent_color`
-- `text_zone`
-- `headline.lines`
-- `headline.emphasis`
-- `subcopy`
-- `facts`
-- `cta`
-- `image.prompt`
-- `image.negative_prompt`
-- `benchmark_refs`
-- `decorations`
+## Design Spec
+最低限:
+- layout_family
+- accent_color
+- text_zone
+- headline.lines
+- headline.emphasis
+- subcopy
+- facts
+- cta
+- image.prompt
+- image.negative_prompt
+- benchmark_refs
+- decorations
 
 # AI Organization
 ## Recruitment Analyst
@@ -101,8 +92,10 @@ Design Specの正式定義:
 - Copy
 - Benchmark Translation
 - Art Direction
-- Typography Direction
 - Layout Family Selection
+- Semantic Line Breaks
+- Emphasis Design
+- Image Prompt
 - renderer-ready Design Spec
 
 ## Creative Reviewer
@@ -110,9 +103,8 @@ Design Specの正式定義:
 - Hearing
 - Benchmark
 - Design Spec fidelity
-- Copy
-- Visual
-- Typography
+- Layout Family quality
+- Copy/Visual/Typography
 - Generation Quality
 
 # Stage 1: Fact Gate
@@ -125,14 +117,10 @@ Design Specの正式定義:
 - requirements
 - benefits
 
-即差し戻し:
-- 別職種追加
-- 別雇用形態追加
-- 未記載待遇追加
-- 数値変更
+別職種・別雇用形態・未記載待遇・数値変更は即差し戻し。
 
 # Stage 2: Benchmark Gate
-Creative Directorの前にbenchmarkを最大3件選ぶ。
+Creative Directorの前にbenchmark最大3件を選ぶ。
 
 見る:
 - 職種/業務の近さ
@@ -143,10 +131,10 @@ Creative Directorの前にbenchmarkを最大3件選ぶ。
 - decoration
 - whitespace
 
-同じデザインをコピーせず、広告文法を参照する。
+同じデザインをコピーせず広告文法を参照する。
 
-# Stage 3: Direction / Design Spec Gate
-Creative Directorの最大2routeを比較する。
+# Stage 3: Design Spec Gate
+Creative Directorの最大2routeを比較。
 
 確認:
 - hearing alignment
@@ -159,10 +147,10 @@ Creative Directorの最大2routeを比較する。
 - Headlineの意味改行が自然
 - 強調語/数字が適切
 - 写真とtext_zoneが競合しない
-- Python固定テンプレ感を生まない指示になっている
+- 固定テンプレ流し込みではない
 
-## Layout Family
-`configs/layouts.yaml` から選ぶ。
+## Layout Families
+`configs/layouts.yaml`
 
 - numeric_impact
 - short_power_word
@@ -171,63 +159,71 @@ Creative Directorの最大2routeを比較する。
 - benefit_stack
 - emotional_message
 
-### 複数枚案件
-全画像を同じLayout Familyにしない。
-ただし無理に全種類へ散らす必要もない。
-**訴求の性質が違うなら見せ方も変える。**
+複数枚案件で全画像を同じFamilyへ流し込まない。訴求が違えば見せ方も変える。
 
-例:
-- 給与 -> numeric_impact
-- ブランクOK -> short_power_word
-- スポーツ×福祉 -> concept_message
-- 仕事内容 -> work_scene
-
-## Gate PASS後
-Creative Directorの `design_spec` 部分だけを案件内:
+Gate PASS後、Creative Directorの `design_spec` を:
 
 `02_direction/<creative-id>-design-spec.json`
 
 へ保存する。
 
-以後、Renderer/ReviewerはこのJSONを共通の正本として使う。
+# Stage 4: Zero-Cost Typography Preview Gate
+**画像AIを呼ぶ前に必ず実施。**
 
-# Stage 4: Generation Gate
+```powershell
+python scripts/preview_design_spec.py --project-id <PJ-XXXX> --creative-id <CR001>
+```
+
+確認対象:
+- Headlineの意味改行
+- 強調語/数字の視認性
+- Layout Familyの情報階層
+- Fact/CTAの密度
+- 余白
+- 小さい文字の押し込みがないか
+- 「Pythonテンプレ感」が残っていないか
+
+仮背景なので写真品質は評価しない。
+Typography/レイアウトが弱ければ**画像生成前にCreative DirectorまたはRendererへ戻す。**
+
+Preview PASS後だけ画像生成へ進む。
+
+# Stage 5: Generation Gate
 標準:
 
 `python scripts/generate_creative.py --project-id <PJ-XXXX> --creative-id <CR001>`
 
-`--design-spec-file` を省略した場合は:
+標準Design Spec:
 `02_direction/<creative-id>-design-spec.json`
-を自動使用する。
 
 画像AI:
 - 人物/背景/仕事/構図のみ
 - readable textを描かせない
-- Design Specのtext_zoneに余白を残す
+- text_zoneに余白を残す
 
 Python Renderer:
-- Headlineの意味改行を保持
+- 意味改行を保持
 - 強調語/数字をDesign Spec通りに描画
-- Layout Familyごとに異なる情報階層を使う
+- Layout Familyごとに異なる情報階層
 - 日本語文字列を改変しない
-- copy.mdを保存
+- copy.md保存
 
-# Stage 5: Review Gate
-Creative Reviewerへ渡す:
+# Stage 6: Review Gate
+Reviewerへ渡す:
 - Fact JSON
 - design-spec.json
 - 完成画像
 - copy.md
-- benchmark 最大3件
+- benchmark最大3件
 
 確認:
-- Design Specどおりに見えるか
-- Layout Familyの狙いが成立するか
+- Design Spec fidelity
+- Layout Familyの狙い
 - 同案件の別画像とテンプレ流し込みになっていないか
 
 blockerがあればdelivery禁止。
 
-# Stage 6: CCO Final QA
+# Stage 7: CCO Final QA
 Reviewer PASSでもCodex自身が画像を見る。
 
 必須:
@@ -237,46 +233,46 @@ Reviewer PASSでもCodex自身が画像を見る。
 - 1秒で主訴求
 - 3秒で仕事と魅力
 - Typographyが機械的ではない
-- Layout Familyの狙いが成立
+- Layout Familyの狙い成立
 - 人物/仕事表現自然
 - copy.md一致
 - 媒体比率一致
 
 **読めるだけではPASSしない。**
 
-# Token Efficiency Policy
-品質を落とさず無駄を減らす。
-
+# Token / Cost Efficiency
 Always:
-- compact contextを使う
-- Agent出力はJSON
+- compact context
+- Agent出力JSON
 - benchmark最大3
 - visual route最大2
 - Fact最大3
-- Design SpecをRenderer/Reviewerで再利用
+- Design SpecをPreview/Renderer/Reviewerで再利用
+- zero-cost previewを画像生成前に使う
 - root cause工程だけrevision
 
 Never:
 - raw CSV全文を各Agentへ毎回送る
 - 5〜10案を無意味に作る
-- Reviewerへ長文評論をさせる
 - Typography問題でFact分析からやり直す
+- Previewで直せる問題のために画像AIを再生成する
 
 # Revision Routing
-- Fact誤り -> recruitment_analyst
+- Fact -> recruitment_analyst
 - Strategy -> creative_director_strategy
 - Copy -> creative_director_copy
 - Benchmark/Visual -> creative_director_art
-- Design Spec / Typography -> creative_director_typography
+- Design Spec/Typography -> creative_director_typography
 - Image artifact -> image_generator
 - Design Spec通り描画されない -> python_renderer
 - Gate運用 -> codex_cco
 
-`REVISION_MAX` は原則2。
+`REVISION_MAX` 原則2。
 
-# Formal Delivery
+# Formal Output
 ```text
 02_direction/<creative-id>-design-spec.json
+02_direction/previews/<creative-id>-design-preview.png
 03_batches/<creative-id>/v001/background.png
 03_batches/<creative-id>/v001/image-prompt.txt
 03_batches/<creative-id>/v001/design-spec.json
@@ -294,5 +290,3 @@ Human Final Approvalは残す。
 5. recruitment-analyst.md
 6. chief-creative-officer.md
 7. image backend
-
-Agent数を増やす前に、Design SpecとLayout Familyの品質を改善する。
