@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
@@ -18,7 +17,9 @@ from services.text_verifier import verify_image_text, write_verification
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify premium AI generated Japanese text against Creative Spec.")
+    parser = argparse.ArgumentParser(
+        description="Verify a registered Codex ImageGen or approved fallback candidate against its Creative Spec."
+    )
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--creative-id", default="CR001")
     parser.add_argument("--version", default="v001")
@@ -51,6 +52,9 @@ def main() -> None:
             "version": args.version,
             "image": str(image_path),
             "creative_spec": str(spec_path),
+            "local_ocr_is_advisory": True,
+            "claude_visual_readback_required": True,
+            "codex_final_visual_check_required": True,
         }
     )
     write_verification(report_path, report)

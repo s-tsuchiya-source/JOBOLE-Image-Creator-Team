@@ -1,12 +1,14 @@
 architecture:
-  version: phase1_premium_integrated_ai_v4
-  principle: "3 active Claude specialists + VSCode Codex CCO; premium AI creates the complete banner including Japanese text, Python verifies and manages delivery"
+  version: phase1_codex_native_imagegen_v5
+  principle: >-
+    VSCode Codex CCO + Codex Integrated Creative Designer + 3 Claude specialists。
+    Codex自身がImageGen capabilityで完成広告を制作し、Pythonは生成後の機械処理とSafe fallbackだけを担当する。
   tuning_guide: .claude/agents/README.md
   benchmark_library_env: ORIGINAL_IMAGE_ROOT
   compact_context: scripts/prepare_creative_context.py
   render_modes: configs/render_modes.yaml
-  premium_creative_spec_contract: services/creative_spec.py
-  safe_design_spec_contract: services/design_spec.py
+  creative_spec_contract: services/creative_spec.py
+  codex_imagegen_skill: .codex/skills/recruitment-imagegen/SKILL.md
   output_mode: compact_json
 
 chief:
@@ -20,13 +22,35 @@ chief:
       - compact_context_gate
       - fact_gate
       - benchmark_selection
-      - premium_creative_spec_approval
+      - creative_spec_approval
+      - imagegen_capability_gate
+      - production_assignment
       - hearing_and_media_alignment
       - layered_text_verification_gate
-      - safe_mode_fallback_decision
+      - fallback_decision
       - root_cause_revision_routing
       - final_qa
       - formal_delivery_approval
+
+codex_agents:
+  integrated_creative_designer:
+    file: .codex/agents/integrated-creative-designer.md
+    skill: .codex/skills/recruitment-imagegen/SKILL.md
+    role: integrated_recruitment_ad_designer
+    runtime: vscode_codex_subagent_or_delegated_role
+    auth: chatgpt_login
+    generation_capability: codex_imagegen
+    output: candidate_image_plus_compact_result
+    expertise:
+      - recruitment_ad_design
+      - imagegen_execution
+      - human_and_work_scene_direction
+      - integrated_japanese_typography
+      - composition
+      - decorative_language
+      - image_editing
+      - visual_self_review
+      - multi_creative_diversity
 
 agents:
   recruitment_analyst:
@@ -48,7 +72,7 @@ agents:
 
   creative_director:
     file: .claude/agents/creative-director.md
-    role: premium_integrated_recruitment_creative_direction
+    role: codex_imagegen_creative_direction
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -59,12 +83,13 @@ agents:
       - photo_art_direction
       - integrated_typography_direction
       - exact_text_contract
-      - premium_image_prompt
+      - codex_imagegen_brief
+      - sibling_creative_diversity
       - safe_mode_fallback_direction
 
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
-    role: independent_premium_delivery_blocking_review
+    role: independent_codex_imagegen_delivery_blocking_review
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -82,8 +107,8 @@ agents:
 
 historical_specialist_files:
   note: >-
-    直接実行しない。旧Production/Copy/Art/Prompt Directorの有用知見はactive Creative Directorへ吸収する。
-    Agent数を増やす前にactive Agent・benchmark・Premium image promptを改善する。
+    旧Production/Copy/Art/Prompt Directorは直接実行しない。
+    実制作はCodex Integrated Creative Designer、企画はClaude Creative Directorへ統合する。
   production_director: .claude/agents/production-director.md
   copy_director: .claude/agents/copy-director.md
   art_director: .claude/agents/art-director.md

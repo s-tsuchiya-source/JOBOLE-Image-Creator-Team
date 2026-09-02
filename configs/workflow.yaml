@@ -1,10 +1,10 @@
 workflow:
-  mode: phase1_premium_integrated_ai_v4
+  mode: phase1_codex_native_imagegen_v5
 
   goal: >-
-    VSCode Codexを最高責任者として、求人ファイル1つからでも一流デザイナー水準を目指す求人広告画像を作る。
-    標準は画像AIが写真・装飾・日本語文字まで一体生成するPremium Mode。
-    Pythonは前処理・生成制御・OCR照合・候補/納品管理へ縮小し、Safe Mode時だけ文字描画を行う。
+    VSCode Codexを最高責任者とし、Codex Integrated Creative DesignerがImageGen capabilityを直接使って、
+    求人広告の人物・背景・装飾・日本語コピー・Typography・レイアウトまで一体生成する。
+    Pythonは案件/前処理/候補登録/OCR補助/納品昇格へ限定する。
 
   intake:
     required:
@@ -29,17 +29,23 @@ workflow:
 
   render_modes:
     config: configs/render_modes.yaml
-    default: premium_ai
-    premium:
+    default: codex_imagegen
+    primary:
       creative_spec_contract: services/creative_spec.py
-      image_renders_required_text: true
-      text_verification_required: true
-      candidate_first: true
+      generation_owner: codex_integrated_creative_designer
+      generation_capability: codex_imagegen
+      skill: .codex/skills/recruitment-imagegen/SKILL.md
+      python_generates_image: false
+      direct_openai_api_required: false
+      candidate_registration: scripts/register_codex_candidate.py
     safe:
       design_spec_contract: services/design_spec.py
       renderer: services/overlay_renderer.py
       image_renders_required_text: false
       fallback_only: true
+    api_fallback:
+      explicit_user_approval_required: true
+      silent_activation_forbidden: true
 
   token_efficiency:
     compact_context_first: true
@@ -47,7 +53,8 @@ workflow:
     max_benchmarks: 3
     max_visual_routes: 2
     max_required_text_blocks: 6
-    reuse_creative_spec_for_generation_verification_and_review: true
+    reuse_creative_spec_for_designer_verification_and_review: true
+    prefer_edit_before_full_regenerate: true
     root_cause_revision_only: true
 
   steps:
@@ -59,7 +66,10 @@ workflow:
     - creative_direction
     - codex_creative_spec_approval
     - creative_spec_save
-    - candidate_generation
+    - codex_imagegen_capability_gate
+    - codex_integrated_candidate_generation
+    - codex_designer_self_check
+    - candidate_registration
     - local_text_verification_if_available
     - creative_review_with_visual_text_readback
     - codex_final_qa
@@ -76,7 +86,10 @@ workflow:
     creative_direction: creative_director
     codex_creative_spec_approval: codex_cco
     creative_spec_save: codex_cco
-    candidate_generation: python_generation_utility
+    codex_imagegen_capability_gate: codex_cco
+    codex_integrated_candidate_generation: codex_integrated_creative_designer
+    codex_designer_self_check: codex_integrated_creative_designer
+    candidate_registration: python_candidate_registration_utility
     local_text_verification_if_available: python_ocr_helper
     creative_review_with_visual_text_readback: creative_reviewer
     codex_final_qa: codex_cco
@@ -92,20 +105,26 @@ workflow:
     config: configs/media.yaml
     generation_must_use_resolved_context: true
 
-  premium_generation:
+  codex_imagegen_generation:
     creative_context_required: true
     approved_creative_spec_required: true
     creative_spec_default_path: 02_direction/<creative-id>-creative-spec.json
+    agent: .codex/agents/integrated-creative-designer.md
+    skill: .codex/skills/recruitment-imagegen/SKILL.md
     output_is_candidate: true
+    canonical_candidate: 03_batches/<creative-id>/<version>/candidate.png
+    registration_script: scripts/register_codex_candidate.py
     formal_delivery_direct_write: false
     exact_text_contract_required: true
     no_extra_readable_text: true
+    silent_api_fallback_allowed: false
 
   text_verification:
     layers:
+      - codex_designer_self_check
       - local_ocr_when_available
       - claude_visual_readback_required
-      - codex_final_visual_check_required
+      - codex_cco_final_visual_check_required
     local_ocr_single_source_of_truth: false
     confirmed_text_error_blocks_delivery: true
     confirmed_fact_error_blocks_delivery: true
@@ -121,21 +140,27 @@ workflow:
 
     creative_spec_approval:
       owner: codex_cco
-      purpose: コピー・exact text contract・写真・Typography・完成広告Promptを生成前に固定する
+      purpose: コピー・exact text contract・写真・Typography・ImageGen制作方針を生成前に固定する
+
+    imagegen_capability_gate:
+      owner: codex_cco
+      purpose: 現在のCodex runtimeでImageGen capabilityが使えることを確認し、使えなければ自動API fallbackせず停止する
 
     text_integrity_gate:
       owner: creative_reviewer_and_codex_cco
-      purpose: 画像AIが生成した日本語・数字・職種・雇用形態をCreative Specと照合する
+      purpose: Codex ImageGenが生成した日本語・数字・職種・雇用形態をCreative Specと照合する
 
     final_qa:
       owner: codex_cco
-      purpose: Fact・Hearing・Benchmark・Text・完成品質を最終横断確認する
+      purpose: Fact・Hearing・Benchmark・Text・完成品質・複数枚の多様性を最終横断確認する
 
   revision:
     max_count: 2
     return_to_responsible_specialist: true
     rerun_all_agents: false
+    prefer_image_edit_for_local_defect: true
     same_text_error_twice_may_trigger_safe_fallback: true
+    api_fallback_requires_user_approval: true
 
   delivery:
     candidate_directory: 03_batches/<creative-id>/<version>
@@ -144,8 +169,8 @@ workflow:
     promotion_script: scripts/promote_creative.py
     human_approval_required: true
 
-  phase2_later:
+  future:
     - batch_candidate_ranking
-    - automatic_cost_guard
+    - automatic_cost_guard_for_explicit_api_fallback
     - slack_intake
     - server_side_orchestration

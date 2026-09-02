@@ -23,9 +23,7 @@ def ensure_intake_structure(project_dir: Path) -> None:
         "00_request/normalized",
         "01_strategy/recruitment",
         "01_strategy/quality_gates",
-        "02_direction/copy",
-        "02_direction/art",
-        "02_direction/prompts",
+        "02_direction",
         "03_batches",
         "04_project_review/claude",
         "04_project_review/codex",
@@ -46,7 +44,7 @@ def save_project_yaml(path: Path, project: dict) -> None:
 
 
 def build_intake_task(project_dir: Path, project: dict, intake: dict) -> str:
-    return f"""# Intake Task
+    return f"""# Intake Task — Codex Native ImageGen v5
 
 ## 対象案件
 - project_id: {project.get('project_id', '')}
@@ -63,20 +61,26 @@ def build_intake_task(project_dir: Path, project: dict, intake: dict) -> str:
 - hearing_count: {intake['hearing_count']} (optional)
 - reference_count: {intake['reference_count']} (optional)
 
-## 次工程
-1. Claude Code Recruitment Analyst が求人事実を抽出する。
-2. Codex CCO Fact Gate が検証する。
-3. Claude Code Production Director が制作戦略を設計する。
-4. 以降は `scripts/run_production.py` の品質パイプラインへ進む。
+## v5 次工程
+1. `prepare_creative_context.py` でcompact contextとbenchmark contact sheetを作る。
+2. Claude Recruitment Analystが求人Factを固定する。
+3. Codex CCOがFact Gate / Benchmark Gateを行う。
+4. Claude Creative DirectorがCodex ImageGen用Creative Specを作る。
+5. Codex CCOがCreative SpecとImageGen capabilityを承認する。
+6. Codex Integrated Creative DesignerがImageGenで完成広告を直接制作する。
+7. `register_codex_candidate.py` でCandidateを登録する。
+8. Claude Creative Reviewer → Codex Final QA → promotionへ進む。
 
-## 判定
-求人原稿が1件以上正常に読み込めれば入力ゲートは通過可能。
-ヒアリングがないことだけを理由に停止しない。
-制作に不可欠な情報が不足する場合のみ、後続Agent/Gateが `needs_clarification` を返す。
+## 重要
+- 標準画像生成者はPythonではない。
+- 標準経路はDirect OpenAI APIを呼ばない。
+- ImageGen capabilityが利用不可なら自動API fallbackせずCCOへ返す。
+- ヒアリングがないことだけを理由に停止しない。
 
 ## 保存先
 - Strategy: {project_dir / '01_strategy'}
 - Direction: {project_dir / '02_direction'}
+- Candidate: {project_dir / '03_batches'}
 - Review: {project_dir / '04_project_review'}
 - Delivery: {project_dir / '05_delivery'}
 """
@@ -98,6 +102,7 @@ def main() -> None:
     project["status"] = "input_ready" if intake["ready"] else "awaiting_input"
     project["source_bundle"] = intake["source_bundle"]
     project["source_index"] = intake["source_index"]
+    project["production_architecture"] = "codex_native_imagegen_v5"
     save_project_yaml(project_path, project)
 
     TMP_ROOT.mkdir(parents=True, exist_ok=True)
@@ -132,7 +137,7 @@ def main() -> None:
     print("状態: input_ready")
     print(f"Source Bundle: {intake['source_bundle']}")
     print(f"Intake Task: {task_path}")
-    print("次工程: scripts/run_production.py でClaude/Codex品質パイプラインを実行します。")
+    print("次工程: VSCode Codex CCOがv5 workflowを実行します。Python run_production.pyは標準入口ではありません。")
 
 
 if __name__ == "__main__":
