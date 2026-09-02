@@ -1,7 +1,7 @@
 # Agent Tuning Guide
 
 ## Architecture
-実働は3 Claude Agent + VSCode Codex CCOだけ。
+実働は3 Claude Agent + VSCode Codex CCO。
 
 ```text
 VSCode Codex CCO
@@ -10,193 +10,137 @@ VSCode Codex CCO
 └─ Creative Reviewer
 ```
 
-最高責任者: `.codex/chief-creative-officer.md`
+Phase 1 v3では、**Agent数を増やさずDesign SpecとLayout Familyを強くする。**
 
-Agent数を増やす前に、**benchmark / hearing / active Agent定義**を改善する。
-
-## Shared Benchmark Library
-正式な制作参考:
-
+## Quality Stack
 ```text
-G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
-```
-
-`.env`:
-```env
-ORIGINAL_IMAGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
-REFERENCE_SHORTLIST_MAX=3
-```
-
-Pythonは画像を評価しない。
-`scripts/prepare_creative_context.py` が行うのは:
-- reference catalog
-- contact sheet
-- 任意 `_index.csv` metadataによる候補補助
-
-最終benchmark選定はCodex CCO。
-Creative Directorへ渡すのは最大3件。
-
-## Token Efficiency
-品質を落とさず、次を固定する。
-
-- `creative-context.json` を一次入力にする
-- raw CSVはFact疑義の確認時だけ読む
-- Agent返答はcompact JSON
-- Visual Routeは通常2案
-- benchmarkは最大3件
-- Fact chipは最大3件
-- Revisionはroot cause工程だけ
-- 同じCSV全文を3Agentへ繰り返し渡さない
-
-## Recruitment Analyst
-ファイル: `recruitment-analyst.md`
-
-担当:
-- exact role / employment type
-- Fact / Evidence
-- Advertising Leverage
-- Claim Boundary
-- Job Reality
-- hearingとFactの分離
-
-ここを直す症状:
-- 別職種が勝手に入る
-- 正社員求人にアルバイト表現が入る
-- 給与/休日/条件がずれる
-- 強いFactをCreative Directorへ渡せない
-
-ここにはCopy/Art/Promptを書かない。
-
-## Creative Director
-ファイル: `creative-director.md`
-
-**画像品質への最大レバー。**
-
-担当:
-- hearing alignment
-- benchmark translation
-- message strategy
-- Copy
-- Visual Route
-- Art Direction
-- Typography Direction
-- Image Prompt
-
-ここを直す症状:
-- 参考サンプルと全く違う
-- 人物写真benchmarkなのに抽象イラストになる
-- コピーが機械的
-- 条件羅列になる
-- タイポがUIのようになる
-- 仕事内容が写真から分からない
-
-## Creative Reviewer
-ファイル: `creative-reviewer.md`
-
-担当:
-- Fact/Hearing/Benchmark blocker
-- 1-second / 3-second test
-- Copy
-- Typography
-- Job Reality
-- Generation Artifact
-- Root Cause Routing
-
-ここを直す症状:
-- 納品不可レベルがPASSする
-- benchmark乖離を見逃す
-- 媒体比率違反を見逃す
-- 「読めるだけ」の画像をPASSする
-
-ReviewerはCreatorより厳しくする。
-
-## Codex CCO
-ファイル: `.codex/chief-creative-officer.md`
-
-担当:
-- Project作成
-- compact context gate
-- Fact Gate
-- benchmark選定
-- hearing/media alignment
-- Direction Gate
-- root-cause revision
-- Final QA
-
-ここを直す症状:
-- Claude案を鵜呑みにする
-- benchmarkを見ずに進める
-- raw CSVを毎回渡してトークンを浪費する
-- Typography問題で全Agentを再実行する
-
-## Renderer / Backend
-Agentだけで解決しない症状:
-
-### 日本語は正しいがデザインが機械的
-`services/overlay_renderer.py`
-- `benchmark_recruit`
-- `modern_recruit`
-
-### 人物/手/背景の生成品質そのものが低い
-- Image Prompt
-- image backend
-- `services/image_generator.py`
-
-## Good Tuning Rule
-抽象ルールではなく、観察可能な基準を書く。
-
-悪い:
-- プロっぽくする
-
-良い:
-- 1秒で主訴求が理解できない場合はREVISION
-- hearingの媒体比率と違えばblocker
-- benchmarkが人物写真主体なら、理由のない抽象イラスト化はblocker
-- 求人1職種に別職種を追加したらblocker
-- 全テキスト同一白BoxならREVISION
-
-## Feedback Loop
-人間FBは次の順で一般化する。
-
-```text
-実画像FB
-↓
-原因工程を特定
-↓
-単発案件だけの問題か判定
-↓
-再発するならAgent/Rendererへ一般ルール化
-↓
-次案件で再確認
-```
-
-1案件固有の内容を全案件の絶対ルールにしない。
-
-## Fixed Workflow
-```text
-Human
-↓
-Codex CCO
-↓
-Project creation
-↓
-Python compact context + original_image catalog/contact sheet
-↓
-Recruitment Analyst
-↓
-Codex Fact Gate
-↓
-Codex Benchmark Gate
+Fact / Hearing / Benchmark
 ↓
 Creative Director
 ↓
-Codex Direction Gate
+Design Spec
 ↓
-Image Generation + deterministic Japanese Typography
+Python Renderer
 ↓
 Creative Reviewer
 ↓
 Codex Final QA
-↓
-Human Final Approval
 ```
+
+## Shared Benchmark Library
+```text
+G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+```
+
+Codex CCOが最大3件を選ぶ。Pythonはcatalog/contact sheetだけ作る。
+
+## Design Spec
+Creative Directorが決める:
+- `layout_family`
+- `headline.lines`
+- `headline.emphasis`
+- `text_zone`
+- `accent_color`
+- `facts`
+- `cta`
+- `image.prompt`
+- `benchmark_refs`
+
+Pythonはこれを正確に描画するだけ。
+
+## Layout Families
+`configs/layouts.yaml`
+
+- `numeric_impact`: 数字訴求
+- `short_power_word`: 短語訴求
+- `concept_message`: コンセプト訴求
+- `work_scene`: 仕事内容/写真主体
+- `benefit_stack`: 複数メリット
+- `emotional_message`: 感情/ミッション訴求
+
+同じ案件の全画像を同じFamilyへ流し込まない。
+
+## Recruitment Analyst
+直す症状:
+- 別職種/別雇用形態が混入
+- 給与/休日/条件がずれる
+- 強いFactが見つからない
+
+Copy/Art/Promptは担当しない。
+
+## Creative Director
+**最大の品質レバー。**
+
+直す症状:
+- コピーが機械的
+- 参考サンプルと遠い
+- 同じレイアウトばかり
+- Headline改行が不自然
+- 数字/強調語が目立たない
+- 写真と文字が競合
+- 仕事内容が伝わらない
+
+## Creative Reviewer
+直す症状:
+- 読めるだけの画像がPASS
+- Design Specと完成画像の差を見逃す
+- テンプレ流し込みを見逃す
+- benchmark乖離を見逃す
+
+## Codex CCO
+直す症状:
+- Claude案を鵜呑みにする
+- Design Specを承認せず生成へ進む
+- 複数画像のLayout Familyが全部同じ
+- 局所問題で全Agentを再実行する
+
+## Renderer
+`services/overlay_renderer.py`
+
+直す症状:
+- Design Specは良いのに描画が弱い
+- 文字サイズ/余白/Fact配置が崩れる
+- Layout Family間の見た目差が弱い
+
+## Tuning Priority
+1. `creative-director.md`
+2. `creative-reviewer.md`
+3. `configs/layouts.yaml`
+4. `services/overlay_renderer.py`
+5. `recruitment-analyst.md`
+6. `.codex/chief-creative-officer.md`
+7. Image Backend
+
+## Token Efficiency
+- `creative-context.json` を一次入力
+- raw sourceはFact疑義だけ
+- Agent返答はcompact JSON
+- benchmark最大3
+- route最大2
+- Fact最大3
+- Design SpecをRenderer/Reviewerで再利用
+- Revisionはroot cause工程だけ
+
+## Good Tuning Rule
+悪い:
+- プロっぽくする
+
+良い:
+- Headlineは意味単位の改行をDesign Specで指定する
+- `numeric_impact` では数字が最初の視線要素になる
+- 3秒で仕事内容が分からなければREVISION
+- 同案件4枚が全て同じLayout Familyなら意図を再確認する
+- Design Spec通り描画されない場合はAgentではなくPython Rendererへ戻す
+
+## Feedback Loop
+```text
+実画像FB
+↓
+Fact / Strategy / Design Spec / Renderer / Image Backend のどこが原因か特定
+↓
+局所修正
+↓
+再発するなら一般ルール化
+```
+
+1案件固有の事情を全案件の絶対ルールにしない。
