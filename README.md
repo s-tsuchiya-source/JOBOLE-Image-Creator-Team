@@ -54,11 +54,11 @@ Pythonがデザインを考えるのではありません。
 複数枚案件で全画像を同じLayout Familyへ流し込みません。訴求の性質に合わせて見せ方を変えます。
 
 ## Design Spec
-Creative Directorの承認案は、案件内に保存します。
-
+Creative Directorの承認案は:
 ```text
 02_direction/CR001-design-spec.json
 ```
+へ保存します。
 
 主な項目:
 ```json
@@ -73,15 +73,12 @@ Creative Directorの承認案は、案件内に保存します。
   "subcopy": {"text": "児童発達支援管理責任者"},
   "facts": ["駅徒歩4分"],
   "cta": {"text": "詳しく見る"},
-  "image": {
-    "prompt": "...",
-    "negative_prompt": "..."
-  },
+  "image": {"prompt": "...", "negative_prompt": "..."},
   "benchmark_refs": ["R0001"]
 }
 ```
 
-`services/design_spec.py` が事前検証し、`services/overlay_renderer.py` が描画します。
+`services/design_spec.py` が検証し、`services/overlay_renderer.py` が描画します。
 
 ## Why This Avoids Mechanical Design
 旧方式:
@@ -94,22 +91,44 @@ CTA -> 同じButton
 
 v3:
 ```text
-求人Fact / Hearing / Benchmark
+Fact / Hearing / Benchmark
 ↓
 Claudeが訴求を判断
 ↓
-Layout Familyを選択
+Layout Family選択
 ↓
-意味単位でHeadline改行
+意味単位のHeadline改行
 ↓
-強調語/数字を指定
+強調語/数字指定
 ↓
-写真と文字の位置関係を指定
+写真と文字の位置関係指定
 ↓
 Pythonが正確に描画
 ```
 
-つまり固定テンプレではなく、**半構造化Design System**です。
+固定テンプレではなく、**半構造化Design System**です。
+
+## Zero-Cost Typography Preview
+画像AIを呼ぶ前に、仮背景上でTypographyだけ確認します。
+
+```powershell
+python scripts/preview_design_spec.py --project-id PJ-XXXX --creative-id CR001
+```
+
+出力:
+```text
+02_direction/previews/CR001-design-preview.png
+```
+
+ここで:
+- 意味改行
+- 強調語/数字
+- Layout Family
+- Fact/CTA密度
+- 余白
+- 機械的テンプレ感
+
+を確認し、弱ければ画像生成前に修正します。これにより画像APIの無駄打ちも防ぎます。
 
 ## original_image Benchmark
 ```text
@@ -118,26 +137,24 @@ G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-I
 
 `scripts/prepare_creative_context.py` がcatalog/contact sheetを作り、Codex CCOが案件に合う参考を最大3件選びます。
 
-Pythonは参考画像の良し悪しを自動決定しません。
-
 ## Project Hard Rule
 正式成果物は必ず:
 ```text
 G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ```
-配下の案件フォルダへ保存します。
+配下へ保存します。
 
 ```text
 PROJECT_DIR/
 ├─ 00_request/
 ├─ 01_strategy/
 ├─ 02_direction/
-│  └─ CR001-design-spec.json
-├─ 03_batches/
-│  └─ CR001/v001/
-│     ├─ background.png
-│     ├─ image-prompt.txt
-│     └─ design-spec.json
+│  ├─ CR001-design-spec.json
+│  └─ previews/CR001-design-preview.png
+├─ 03_batches/CR001/v001/
+│  ├─ background.png
+│  ├─ image-prompt.txt
+│  └─ design-spec.json
 ├─ 04_project_review/
 └─ 05_delivery/
    ├─ CR001.png
@@ -150,7 +167,7 @@ PROJECT_DIR/
 ↓
 Codex CCO: Project作成
 ↓
-Python: creative-context + reference catalog/contact sheet
+Python: creative-context + benchmark catalog/contact sheet
 ↓
 Recruitment Analyst
 ↓
@@ -158,18 +175,13 @@ Codex Fact Gate
 ↓
 Codex Benchmark Gate
 ↓
-Creative Director
-  - 最大2 Visual Routes
-  - Layout Family選択
-  - Copy
-  - Semantic Line Breaks
-  - Emphasis
-  - Image Prompt
-  - Design Spec
+Creative Director -> Design Spec
 ↓
 Codex Design Spec Approval
 ↓
-02_direction/<CR>-design-spec.json
+Python Typography Preview
+↓
+Codex Preview Approval
 ↓
 Image AI: 文字なし背景
 ↓
@@ -187,37 +199,32 @@ Human Final Approval
 
 例:
 ```text
-JOBOLE（4:3）
-→ configs/media.yaml
-→ 1200x900 / 4:3
+JOBOLE（4:3） -> 1200x900 / 4:3
 ```
 
-## Token Efficiency
+## Token / Cost Efficiency
 - `creative-context.json` を一次入力
 - raw sourceはFact疑義だけ
 - Agent出力はcompact JSON
 - benchmark最大3
 - Visual Route最大2
 - Fact最大3
-- Design SpecをRenderer/Reviewerで再利用
+- Design SpecをPreview/Renderer/Reviewerで再利用
 - Revision原則最大2
 - 問題工程だけ再実行
+- Typography問題は画像生成前Previewで潰す
 
 ## Generate Creative
-CodexがDesign Specを保存した後:
+Preview PASS後:
 
 ```powershell
 python scripts/generate_creative.py --project-id PJ-XXXX --creative-id CR001
 ```
 
-標準では:
-```text
-02_direction/CR001-design-spec.json
-```
-を自動使用します。
+標準では `02_direction/CR001-design-spec.json` を自動使用します。
 
 ## Renderer Smoke Test
-画像APIを使わず、6 Layout Familyの日本語描画だけテストできます。
+画像APIを使わず、6 Layout Familyを確認できます。
 
 ```powershell
 python scripts/test_design_renderer.py
@@ -234,6 +241,8 @@ python -m compileall scripts services
 python scripts/validate_system.py
 python scripts/validate_system.py --runtime-config
 ```
+
+PR/mainではGitHub Actionsでもcompile + structure validationを行います。
 
 ## Tuning Priority
 1. `.claude/agents/creative-director.md`
