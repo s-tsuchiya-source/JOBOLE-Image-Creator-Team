@@ -76,8 +76,9 @@ def normalize_design_spec(data: dict, *, fact_max: int = 3) -> dict:
 
     headline_text = "\n".join(headline_lines)
     emphasis = _clean_string_list(headline_data.get("emphasis"), limit=4)
+    flattened_headline = headline_text.replace("\n", "")
     for token in emphasis:
-        if token not in headline_text.replace("\n", ""):
+        if token not in flattened_headline:
             raise DesignSpecError(f"headline emphasis token is not present in headline: {token}")
 
     subcopy_data = data.get("subcopy") if isinstance(data.get("subcopy"), dict) else {}
@@ -96,7 +97,15 @@ def normalize_design_spec(data: dict, *, fact_max: int = 3) -> dict:
     cta_data = data.get("cta") if isinstance(data.get("cta"), dict) else {}
     cta_text = _clean_text(cta_data.get("text") or data.get("cta_text"))
 
+    image_data = data.get("image") if isinstance(data.get("image"), dict) else {}
+    image_prompt = _clean_text(image_data.get("prompt") or data.get("image_prompt"))
+    negative_prompt = _clean_text(image_data.get("negative_prompt") or data.get("negative_prompt"))
+    if not image_prompt:
+        raise DesignSpecError("image.prompt is required")
+
+    benchmark_refs = _clean_string_list(data.get("benchmark_refs"), limit=3)
     decorations = data.get("decorations") if isinstance(data.get("decorations"), dict) else {}
+
     normalized = {
         "version": _clean_text(data.get("version")) or "1.0",
         "layout_family": layout_family,
@@ -111,6 +120,11 @@ def normalize_design_spec(data: dict, *, fact_max: int = 3) -> dict:
         "subcopy": {"text": subcopy_text},
         "facts": facts,
         "cta": {"text": cta_text},
+        "image": {
+            "prompt": image_prompt,
+            "negative_prompt": negative_prompt,
+        },
+        "benchmark_refs": benchmark_refs,
         "decorations": {
             "accent_bar": bool(decorations.get("accent_bar", True)),
             "rays": bool(decorations.get("rays", False)),
