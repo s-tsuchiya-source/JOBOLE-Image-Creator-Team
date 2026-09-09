@@ -1,3 +1,8 @@
+---
+name: recruitment-imagegen
+description: 承認済みCreative SpecからJOBOLE求人広告をImageGenで制作する。Adobe素材を優先使用し、適合素材がない場合のみ人物から生成する。Fact分析やSafe Python制作には使わない。
+---
+
 # Recruitment ImageGen Skill
 
 ## Purpose
@@ -20,6 +25,14 @@ CodexがJOBOLE求人広告をImageGen capabilityで直接制作するための�
 - approved `creative-spec.json`
 - benchmark refs 最大3
 - resolved output size
+- completed `creative-spec.asset_source` と、Adobe採用時の原本画像
+
+## Adobe Material First
+実制作前に [Adobe素材優先フロー](../../../docs/adobe-material-first.md) の選定・入力・検証契約を適用する。
+`ADOBE_IMAGE_ROOT` の画像はユーザーが制作利用を許可済み。CCOの選定記録を確認し、`adobe_stock` なら原本を目視してImageGenへ実画像として入力する。ローカル画像の入力に対応するツールでは `referenced_image_paths` に選定パスを渡す。
+素材のパスを依頼文に書くだけ、見た目だけ参考にして人物を新規生成する、という使い方はしない。
+原本の顔・服装・表情・視線・人数・写真内容を保持し、トリミング・縦横比を保つ拡縮・配置で統合する。
+`generated` は素材を目視確認済みで、適合素材がない理由がある場合のみ。未検索・接続不可・未入力なら素材の確認と入力を解決してから制作する。
 
 ## ImageGen Instruction Pattern
 ImageGenへ渡す指示は、Creative Specの `image.prompt` と `text_contract` を正本にする。
@@ -34,6 +47,7 @@ ImageGenへ渡す指示は、Creative Specの `image.prompt` と `text_contract`
 7. 余計な読める文字を追加しないこと
 8. fake logo / watermark / random signage禁止
 9. 納品可能なpolishを要求
+10. `asset_source` の使用素材・役割・原本保持指示、または適合素材なしに基づく新規生成指示
 
 ## Exact Text Rule
 required textは意味が同じでも言い換え禁止。
@@ -62,10 +76,11 @@ required textは意味が同じでも言い換え禁止。
 ## Generation / Edit Loop
 最大2回を原則とする。
 
-1回目: 完成広告を生成。
+1回目: Adobe原本を使って完成広告を制作。適合素材なしの記録がある場合のみ人物から生成。
 2回目: 明確な文字/局所品質不具合があればeditを優先。editで直せない場合のみ再生成。
 
 同じrequired text誤りが続いたらCCOへ戻す。無限生成しない。
+Adobe採用時は編集・再制作でも原本を維持し、完成候補と原本を照合する。
 
 ## Saving
 ImageGen出力は必ず案件配下へ保存:

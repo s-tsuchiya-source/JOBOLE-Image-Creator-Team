@@ -1,5 +1,7 @@
 # Codex Native ImageGen v5 — System Design
 
+2026-09-07更新: 写真の調達・入力には [Adobe素材優先フロー](adobe-material-first.md) を適用する。各Creativeで既存Adobe素材を先に選定し、`asset_source` に記録する。本文の「一体生成」は、Adobe採用時には原本写真を保持した完成広告制作を意味する。人物からの新規生成は適合素材がない場合のみ。
+
 ## 0. Decision
 標準制作方式を次へ変更する。
 
@@ -55,7 +57,7 @@ Codex CCO
 ├─ Claude Recruitment Analyst
 ├─ Claude Creative Director
 ├─ Codex Integrated Creative Designer + ImageGen
-└─ Claude Creative Reviewer
+└─ Independent Creative Reviewer（標準Codex、CCOが選択）
 ↓
 Codex Final QA
 ↓
@@ -136,7 +138,7 @@ Candidate Registration
 ↓
 Optional OCR
 ↓
-Claude Reviewer
+Independent Reviewer（標準Codex）
 ↓
 Codex Final QA
 ↓
@@ -432,6 +434,8 @@ Safe Python:
 ```
 
 ## After Approval
+承認者はCodex CCO。独立Reviewer（標準Codex）の実検証結果をCCOが確認し、下記の承認JSONに担当providerとレビュー記録を紐付ける。Claude承認を必須条件にはしない。
+
 ```text
 04_project_review/CR001-v001-final-approval.json
 ```
@@ -439,9 +443,12 @@ Safe Python:
 ## After Promotion
 ```text
 05_delivery/CR001.png
-05_delivery/CR001-copy.md
-05_delivery/CR001-approval.json
+04_project_review/delivery_records/CR001/v001/CR001-copy.md
+04_project_review/delivery_records/CR001/v001/CR001-approval.json
+04_project_review/delivery_records/CR001/v001/CR001-generation-metadata.json
 ```
+
+`05_delivery` は完成画像のみ。コピー文・承認JSON・生成記録は上記の納品記録フォルダへ、説明文やステータス等は `04_project_review` 配下へ保存する。
 
 ---
 

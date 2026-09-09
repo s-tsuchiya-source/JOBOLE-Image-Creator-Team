@@ -18,6 +18,7 @@ load_dotenv(REPO_ROOT / ".env", override=True)
 
 from scripts.load_project import load_environment, resolve_project_dir
 from services.creative_spec import CreativeSpecError, load_creative_spec, write_creative_spec
+from services.production_assets import AssetSelectionError, require_asset_selection
 from services.text_verifier import verify_image_text, write_verification
 
 
@@ -161,6 +162,11 @@ def main() -> None:
     except CreativeSpecError as exc:
         raise SystemExit(f"Creative Spec validation failed: {exc}") from exc
 
+    try:
+        require_asset_selection(spec["asset_source"], library=context.get("production_asset_library", {}))
+    except AssetSelectionError as exc:
+        raise SystemExit(f"Adobe asset selection validation failed: {exc}") from exc
+
     snapshot = batch_dir / "creative-spec.json"
     write_creative_spec(snapshot, spec)
     expected_copy = batch_dir / "expected-copy.md"
@@ -177,7 +183,8 @@ def main() -> None:
             "generation_capability": "codex_imagegen",
             "candidate": str(candidate),
             "local_ocr_is_advisory": True,
-            "claude_visual_readback_required": True,
+            "independent_reviewer_visual_readback_required": True,
+            "reviewer_selection_owner": "codex_cco",
             "codex_final_visual_check_required": True,
         }
     )
@@ -196,6 +203,7 @@ def main() -> None:
         "output_spec_source": output_spec_source,
         "creative_context": str(context_path),
         "source_spec": str(spec_source),
+        "asset_source": spec["asset_source"],
         "candidate": str(candidate),
         "expected_copy": str(expected_copy),
         "verification": str(verification_path),

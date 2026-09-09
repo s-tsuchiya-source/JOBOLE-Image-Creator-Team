@@ -29,6 +29,7 @@ EXPECTED_WORKFLOW = [
     "recruitment_analysis",
     "codex_fact_check",
     "codex_benchmark_gate",
+    "adobe_asset_selection",
     "creative_direction",
     "codex_creative_spec_approval",
     "creative_spec_save",
@@ -201,14 +202,14 @@ def validate_structure(errors: list[str], messages: list[str]) -> None:
 
     messages.extend(
         [
-            "Architecture: Codex CCO + Codex Integrated Creative Designer + 3 Claude specialists",
+            "Architecture: Codex CCO + Codex Integrated Creative Designer + Codex Independent Creative Reviewer + Claude specialists",
             "Primary render mode: CODEX NATIVE IMAGEGEN",
             "Primary image owner: Codex Integrated Creative Designer",
             "Primary API key requirement: NO",
             "Python role: project/context/candidate registration/OCR/promotion; not primary image generator",
             "Safe Python typography: FALLBACK ONLY",
             "Direct OpenAI API: EXPLICIT USER-APPROVED FALLBACK ONLY",
-            "Text verification: Designer self-check + optional OCR + Claude visual readback + Codex final check",
+            "Text verification: Designer self-check + optional OCR + independent reviewer visual readback + Codex CCO final check",
             "Candidate-first delivery: unreviewed images never go directly to 05_delivery",
             "Benchmark library: original_image -> Codex CCO shortlist max 3",
         ]

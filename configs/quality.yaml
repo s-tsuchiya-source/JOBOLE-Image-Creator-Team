@@ -41,7 +41,8 @@ quality:
     codex_designer_self_check_required: true
     local_ocr_optional: true
     local_ocr_single_source_of_truth: false
-    claude_visual_readback_required: true
+    independent_reviewer_visual_readback_required: true
+    visual_reviewer_selection_owner: codex_cco
     codex_final_visual_check_required: true
     exact_required_text_match_required: true
     critical_number_match_required: true

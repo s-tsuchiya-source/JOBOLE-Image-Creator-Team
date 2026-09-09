@@ -1,9 +1,15 @@
 workflow:
   mode: phase1_codex_native_imagegen_v5
 
+  claude_anonymized_text_sharing:
+    policy: configs/agents.yaml
+    decision_owner: codex_cco
+    repeated_user_confirmation_required: false
+
   goal: >-
-    VSCode Codexを最高責任者とし、Codex Integrated Creative DesignerがImageGen capabilityを直接使って、
-    求人広告の人物・背景・装飾・日本語コピー・Typography・レイアウトまで一体生成する。
+    VSCode Codex CCOを最高責任者とし、CCOが内容を理解して、各Claude Agentへの作業指示・成果物レビュー・修正指示・再レビューを行う。
+    Codex Integrated Creative DesignerがImageGen capabilityを直接使い、Adobe素材を優先利用し、適した素材がない場合のみ人物から生成する。
+    求人広告の写真・装飾・日本語コピー・Typography・レイアウトを一体制作する。
     Pythonは案件/前処理/候補登録/OCR補助/納品昇格へ限定する。
 
   intake:
@@ -26,6 +32,18 @@ workflow:
     shortlist_max: 3
     python_role: index_and_contact_sheet_only
     creative_selection_owner: codex_cco
+
+  production_asset_library:
+    env: ADOBE_IMAGE_ROOT
+    default_path: G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/Adobe/_image
+    policy: adobe_first
+    usage_authorized_by_user: true
+    python_role: index_and_contact_sheet_only
+    selection_owner: codex_cco
+    selection_contract: asset_source
+    guide: docs/adobe-material-first.md
+    generate_people_only_when: completed_visual_search_has_no_suitable_asset
+    unavailable_action: stop_asset_selection_and_restore_access
 
   render_modes:
     config: configs/render_modes.yaml
@@ -63,6 +81,7 @@ workflow:
     - recruitment_analysis
     - codex_fact_check
     - codex_benchmark_gate
+    - adobe_asset_selection
     - creative_direction
     - codex_creative_spec_approval
     - creative_spec_save
@@ -77,12 +96,15 @@ workflow:
     - formal_promotion
     - human_final_approval
 
+  # ownersは各工程の実作業担当。全工程の指揮と各Agent成果物の採否はCodex CCOが担う。
+  # 正式11役割の共通指揮系統はconfigs/agents.yamlのcommand_structureとAGENTS.mdに従う。
   owners:
     intake: codex_cco
     context_preparation: python_context_utility
     recruitment_analysis: recruitment_analyst
     codex_fact_check: codex_cco
     codex_benchmark_gate: codex_cco
+    adobe_asset_selection: codex_cco
     creative_direction: creative_director
     codex_creative_spec_approval: codex_cco
     creative_spec_save: codex_cco
@@ -91,7 +113,7 @@ workflow:
     codex_designer_self_check: codex_integrated_creative_designer
     candidate_registration: python_candidate_registration_utility
     local_text_verification_if_available: python_ocr_helper
-    creative_review_with_visual_text_readback: creative_reviewer
+    creative_review_with_visual_text_readback: codex_independent_creative_reviewer
     codex_final_qa: codex_cco
     final_approval_file: codex_cco
     formal_promotion: python_delivery_utility
@@ -108,6 +130,7 @@ workflow:
   codex_imagegen_generation:
     creative_context_required: true
     approved_creative_spec_required: true
+    completed_adobe_asset_selection_required: true
     creative_spec_default_path: 02_direction/<creative-id>-creative-spec.json
     agent: .codex/agents/integrated-creative-designer.md
     skill: .codex/skills/recruitment-imagegen/SKILL.md
@@ -123,7 +146,7 @@ workflow:
     layers:
       - codex_designer_self_check
       - local_ocr_when_available
-      - claude_visual_readback_required
+      - independent_reviewer_visual_readback_required
       - codex_cco_final_visual_check_required
     local_ocr_single_source_of_truth: false
     confirmed_text_error_blocks_delivery: true
@@ -142,6 +165,10 @@ workflow:
       owner: codex_cco
       purpose: コピー・exact text contract・写真・Typography・ImageGen制作方針を生成前に固定する
 
+    adobe_asset_selection:
+      owner: codex_cco
+      purpose: Adobe素材を目視選定し、採用素材または適合素材なしの理由をasset_sourceへ記録する。接続不可は素材なしと判定しない。
+
     imagegen_capability_gate:
       owner: codex_cco
       purpose: 現在のCodex runtimeでImageGen capabilityが使えることを確認し、使えなければ自動API fallbackせず停止する
@@ -155,6 +182,8 @@ workflow:
       purpose: Fact・Hearing・Benchmark・Text・完成品質・複数枚の多様性を最終横断確認する
 
   revision:
+    instruction_owner: codex_cco
+    revised_deliverable_review_owner: codex_cco
     max_count: 2
     return_to_responsible_specialist: true
     rerun_all_agents: false
@@ -165,6 +194,8 @@ workflow:
   delivery:
     candidate_directory: 03_batches/<creative-id>/<version>
     formal_directory: 05_delivery
+    formal_directory_images_only: true
+    supporting_records_directory: 04_project_review/delivery_records/<creative-id>/<version>
     explicit_approval_required: true
     promotion_script: scripts/promote_creative.py
     human_approval_required: true

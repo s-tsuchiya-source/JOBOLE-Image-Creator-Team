@@ -1,10 +1,50 @@
+definition_set:
+  source: jobole-agents-set.zip
+  adopted_on: '2026-09-07'
+  status: official
+  directory: .claude/agents
+  count: 11
+  guide: .claude/agents/README.md
+  runtime_integration: pending_schema_and_workflow_alignment
+
+# 全11役割に適用する運用契約。個別の実行登録・schema接続とは区別する。
+command_structure:
+  contract: AGENTS.md
+  highest_project_authority: codex_cco
+  claude_specialist_count: 11
+  all_claude_specialists_report_to: codex_cco
+  task_assignment_owner: codex_cco
+  deliverable_review_owner: codex_cco
+  revision_instruction_owner: codex_cco
+  formal_delivery_approval_owner: codex_cco
+  visual_reviewer_selection_owner: codex_cco
+  default_visual_reviewer: codex_independent_creative_reviewer
+  anonymized_job_conditions_and_copy_sharing_owner: codex_cco
+  unresolved_reviewer_fail_blocks_delivery: true
+  human_final_approval_required: true
+
+# 匿名化した求人条件・コピーに対するユーザーの継続許可。実行環境の権限制御は変更しない。
+claude_anonymized_text_sharing:
+  authorization: standing_user_authorization
+  authorized_on: '2026-09-07'
+  destination: claude
+  decision_owner: codex_cco
+  repeated_user_confirmation_required: false
+  scope:
+    - anonymized_job_conditions
+    - anonymized_creative_copy
+
+# 以下のarchitecture/agentsは既存v5実行設定。正式定義11件への自動フロー移行は未実施。
 architecture:
   version: phase1_codex_native_imagegen_v5
   principle: >-
-    VSCode Codex CCO + Codex Integrated Creative Designer + 3 Claude specialists。
+    Codex CCOが最高責任者として正式なClaude全11役割へ指示し、各成果物のレビューと修正指示を行う。
+    既存v5経路はCodex Integrated Creative Designer + 3 Claude specialistsを基本構成とする。
     Codex自身がImageGen capabilityで完成広告を制作し、Pythonは生成後の機械処理とSafe fallbackだけを担当する。
   tuning_guide: .claude/agents/README.md
   benchmark_library_env: ORIGINAL_IMAGE_ROOT
+  production_asset_library_env: ADOBE_IMAGE_ROOT
+  production_asset_policy: adobe_first
   compact_context: scripts/prepare_creative_context.py
   render_modes: configs/render_modes.yaml
   creative_spec_contract: services/creative_spec.py
@@ -18,10 +58,15 @@ chief:
     runtime: vscode_codex
     auth: chatgpt_login
     responsibilities:
+      - understand_request_facts_hearing_and_progress
+      - all_claude_specialist_task_assignment
+      - all_specialist_deliverable_review
+      - specialist_revision_instructions_and_re_review
       - project_scope_and_storage
       - compact_context_gate
       - fact_gate
       - benchmark_selection
+      - adobe_asset_selection
       - creative_spec_approval
       - imagegen_capability_gate
       - production_assignment
@@ -33,10 +78,20 @@ chief:
       - formal_delivery_approval
 
 codex_agents:
+  independent_creative_reviewer:
+    file: .codex/agents/independent-creative-reviewer.md
+    role: independent_visual_review_and_text_readback
+    reports_to: codex_cco
+    runtime: codex_subagent
+    reviewer_provider: codex
+    output: compact_review_json
+    independent_from_generation: true
+
   integrated_creative_designer:
     file: .codex/agents/integrated-creative-designer.md
     skill: .codex/skills/recruitment-imagegen/SKILL.md
     role: integrated_recruitment_ad_designer
+    reports_to: codex_cco
     runtime: vscode_codex_subagent_or_delegated_role
     auth: chatgpt_login
     generation_capability: codex_imagegen
@@ -56,6 +111,7 @@ agents:
   recruitment_analyst:
     file: .claude/agents/recruitment-analyst.md
     role: recruitment_fact_verbatim_and_ad_leverage_analysis
+    reports_to: codex_cco
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -73,6 +129,7 @@ agents:
   creative_director:
     file: .claude/agents/creative-director.md
     role: codex_imagegen_creative_direction
+    reports_to: codex_cco
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -90,6 +147,7 @@ agents:
   creative_reviewer:
     file: .claude/agents/creative-reviewer.md
     role: independent_codex_imagegen_delivery_blocking_review
+    reports_to: codex_cco
     runtime: claude_code
     auth: subscription_login
     output: compact_json
@@ -105,11 +163,16 @@ agents:
       - generation_artifact_review
       - root_cause_routing
 
-historical_specialist_files:
+additional_specialist_files:
   note: >-
-    旧Production/Copy/Art/Prompt Directorは直接実行しない。
-    実制作はCodex Integrated Creative Designer、企画はClaude Creative Directorへ統合する。
+    添付ZIPから採用した正式定義。上記agentsの3役割と合わせて11件。
+    全役割がcommand_structureに従い、Codex CCOから指示を受けて成果物をCCOへ返す。
+    ここは追加定義の所在一覧であり、既存Python runnerへの実行登録ではない。
   production_director: .claude/agents/production-director.md
   copy_director: .claude/agents/copy-director.md
   art_director: .claude/agents/art-director.md
+  image_director: .claude/agents/image-director.md
+  text_director: .claude/agents/text-director.md
+  designer: .claude/agents/designer.md
   prompt_designer: .claude/agents/prompt-designer.md
+  reviewer: .claude/agents/reviewer.md

@@ -15,6 +15,13 @@ def main() -> None:
         "version": "5.0",
         "mode": "codex_integrated",
         "benchmark_refs": ["R0001", "R0002"],
+        "asset_source": {
+            "library_root": str(REPO_ROOT),
+            "search_status": "completed",
+            "mode": "generated",
+            "search_summary": "Synthetic contract fixture; no production images used.",
+            "fallback_reason": "Fixture has no suitable production assets.",
+        },
         "strategy": {"message_axis": "access", "fact_ids": ["F001"]},
         "text_contract": [
             {

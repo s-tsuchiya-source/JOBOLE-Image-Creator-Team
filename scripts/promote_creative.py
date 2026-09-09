@@ -89,14 +89,20 @@ def main() -> None:
         output_name = Path(output_name).stem + ".png"
 
     final_image = delivery_dir / output_name
-    final_copy = delivery_dir / f"{Path(output_name).stem}-copy.md"
-    final_approval = delivery_dir / f"{Path(output_name).stem}-approval.json"
-    final_metadata = delivery_dir / f"{Path(output_name).stem}-generation-metadata.json"
+    # Keep the delivery folder image-only; retain the exact supporting records
+    # under review, grouped by the creative and version that were approved.
+    records_dir = project_dir / "04_project_review" / "delivery_records" / args.creative_id / args.version
+    records_dir.mkdir(parents=True, exist_ok=True)
+    final_copy = records_dir / f"{Path(output_name).stem}-copy.md"
+    final_approval = records_dir / f"{Path(output_name).stem}-approval.json"
+    final_metadata = records_dir / f"{Path(output_name).stem}-generation-metadata.json"
 
     shutil.copy2(candidate, final_image)
     if expected_copy.exists():
         shutil.copy2(expected_copy, final_copy)
-    shutil.copy2(approval_path, final_approval)
+    # A repeat promotion may use the archived approval as its input.
+    if approval_path != final_approval.resolve():
+        shutil.copy2(approval_path, final_approval)
     shutil.copy2(metadata_path, final_metadata)
 
     print("CREATIVE PROMOTION: PASS")
