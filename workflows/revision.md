@@ -5,29 +5,29 @@
 
 ## 原因分類
 - `fact_error` → Recruitment Analyst / 人間確認
-- `strategy_error` → Production Director
+- `strategy_error` → Creative Director
 - `copy_error` → Copy Director
 - `art_error` → Art Director
 - `prompt_error` → Prompt Designer
-- `generation_error` → 同じ承認済みDirectionで画像再生成
+- `generation_error` → Codex Integrated Creative Designerによる編集または再生成
 - `format_error` → レイアウト/出力処理を修正
 - `brand_error` → Art / Prompt Directionを修正
 - `missing_information` → 人間へ最小限の確認
 
 ## 流れ
-1. Claude Creative Reviewerが問題とroot causeを返す。
-2. Codex Final Gateが独立して原因を検証する。
+1. Claude Creative Reviewer等が問題・根拠・root cause・修正案をCodex CCOへ返す。
+2. 案件を統括するCodex CCOが実画像と成果物を確認し、原因を検証する。
 3. Codex CCOが差し戻し先を決定する。
-4. 原因Agentへ、承認済み要素を保持したまま修正指示を返す。
-5. 修正成果物を再度Schema検証・Codex Gateへ通す。
-6. 画像を再生成する。
-7. Claude Reviewer + Codex Final Gateを再実行する。
-8. 同一Creativeの自動修正は原則最大3回。
+4. Codex CCOが原因Agentへ、具体的な修正内容・保持する承認済み要素・再確認条件を指示する。Production Directorは進行管理と修正先の提案で補佐する。
+5. Codex CCOが再提出物をレビューし、必要なSchema検証も行う。
+6. 実画像の修正が必要なら、CCOがCodex Designerへ編集または再生成を指示する。局所不具合は編集を優先する。
+7. CCOがClaudeへ再レビューを指示し、結果と実画像を最終確認する。
+8. 同一Creativeの修正上限は `configs/workflow.yaml` の `revision.max_count` / 実行時の `REVISION_MAX` に従う（既定2回）。
 9. 上限超過は `needs_human_review`。
 
 ## コスト
 ### local_webui
-画像API増分コスト0円。コスト理由では止めないが、無限ループ防止のため3回上限は維持する。
+旧ローカル経路のコスト条件。現在の標準は `codex_imagegen`。使用する場合もCCOが上記の修正上限を管理する。
 
 ### OpenAI Image API
 - 330円以上では次の有料自動修正を開始しない。

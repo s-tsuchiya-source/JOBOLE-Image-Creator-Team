@@ -1,112 +1,54 @@
 # Production Workflow
 
-## 目的
-Phase 1では、VSCode Codexを最高責任者として、3人のClaude専門家と画像/ファイル処理だけを使い、求人ファイル1つからでも高品質画像を作る。
+## 目的と指揮系統
+Codex CCOを最高責任者とし、求人ファイルから案件作成・専門分析・画像制作・レビュー・正式納品まで進める。
+Codex CCO自身が内容を理解して各Claude Agentへ指示し、各成果物のレビュー・修正指示・再レビューを行う。共通契約は [AGENTS.md](../AGENTS.md)、詳細は [CCO定義](../.codex/chief-creative-officer.md)。
+
+匿名化した求人条件・コピーのClaudeへの送信は、ユーザーが継続許可している。Codex CCOが匿名化・共有範囲・実行の必要性を判断し、送信ごとのユーザー再承認を工程に追加しない。
 
 ## ユーザー入力
-通常受付は次の3種類だけ。
+- 求人ファイル: 必須。求人Factの正本。
+- ヒアリングシート: 任意。希望・媒体・枚数・NG・テイスト。
+- 補足テキスト: 任意。
 
-- 求人ファイル: **必須**
-- ヒアリングシート: 任意
-- 補足テキスト: 任意
-
-求人ファイルが正常に読める限り、ヒアリングや補足テキストが無くても制作を止めない。
-
-未指定時のPhase 1既定値:
-- 1枚
-- 1200x628
-- 求人広告画像
+ヒアリングがなくても制作できる。未指定時の既定値は `configs/workflow.yaml` の1枚・1200×628を使い、指定があれば `resolved_output_spec` を優先する。給与・待遇・休日・勤務時間・資格・経験年数・数値実績などの求人事実を推測で補わない。
 
 ## 役割
-- Codex CCO: 最高責任者・統括・承認・差し戻し・Final QA
-- Recruitment Analyst: 求人事実整理
-- Creative Director: 戦略・コピー・Art Direction・Prompt・Overlay Text
-- Creative Reviewer: 独立レビュー
-- Python: 画像生成・正確な文字入れ・サイズ調整・保存・ファイル整理
+- Codex CCO: 案件理解、全体方針、各Agentへの指示、成果物レビュー、修正指示、統合・承認、最終目視確認、正式納品承認。
+- Claude専門Agent: CCOから割り当てられた分析・戦略・コピー・デザイン仕様・素材選定・進行管理・独立レビューを担当し、成果物と根拠をCCOへ返す。
+- Codex Integrated Creative Designer: CCO承認済みCreative Specに基づき、ImageGenで写真・装飾・日本語コピー・Typography・レイアウトを一体制作する。
+- Python: 案件作成、前処理、素材一覧、候補登録、サイズ検査、OCR補助、承認済み画像の納品昇格。
+
+正式なClaude Agentは [一覧の11役割](../.claude/agents/README.md)。CCOが案件に必要なAgentを選ぶ。Creative Directorは戦略統合、Production Directorは進行管理の専門担当であり、案件全体の指揮と最終裁定はCCOが行う。
 
 ## 標準フロー
-1. HumanがVSCode Codexへ求人ファイルを渡す。ヒアリング/補足テキストはあれば追加する。
-2. Codexが案件名等を自動決定し、入力を整理する。
-3. CodexがClaude Recruitment Analystへ求人分析を依頼する。
-4. Codexが元求人とFact Sheetを照合し、Fact Checkを行う。
-5. CodexがClaude Creative Directorへ承認済み事実と、存在する場合のみヒアリング/補足テキストを渡す。
-6. Creative DirectorがTarget / Key Message / Copy / Art / Prompt / Overlay Textを一体設計する。
-7. CodexがDirection Approvalを行い、画像内に載せる日本語文言を確定する。
-8. Codexが `scripts/generate_creative.py` を使い、文字なし背景生成 → Python文字入れ → サイズ調整 → 保存を行う。
-9. Pythonは完成画像と `*-copy.md` を同時出力する。
-10. CodexがClaude Creative Reviewerへ完成画像とcopy.mdのレビューを依頼する。
-11. CodexがReviewer結果・完成画像・copy.mdを見てFinal QAする。
-12. NGなら原因工程だけへ戻す。原則最大3回。
-13. PASS後、人間が最終承認する。
+1. Codex CCOが依頼・求人・ヒアリングを理解し、案件を作成する。`PROJECT_ID` / `PROJECT_DIR` / 入力保存を確認する。
+2. CCOが `scripts/prepare_creative_context.py` でcompact contextを準備し、媒体・枚数・サイズ・禁止事項を確認する。
+3. CCOがClaude Recruitment Analystへ入力・担当範囲・成果物・合格条件を示して分析を指示する。
+4. CCOが分析結果を求人Factと照合する。誤りや不足があれば具体的に修正を指示し、再提出物をレビューする。
+5. CCOがbenchmarkを最大3件選び、[Adobe素材優先フロー](../docs/adobe-material-first.md) に従って素材を選定する。必要ならImage Directorへ調査を指示し、結果をCCOが目視確認・承認する。
+6. CCOがCreative Directorと必要なCopy / Art / Text / Designer等へ専門作業を指示する。各成果物をCCOがレビューし、根拠・依頼適合・品質を確認して採用または修正を判断する。
+7. CCOが採用成果物を `02_direction/<creative-id>-creative-spec.json` へ統合し、exact `text_contract`、`asset_source`、benchmark、制作方針、出力条件を承認する。Prompt Designerを使う場合も、その依頼文をCCOがレビューする。
+8. CCOがImageGen capabilityを確認し、Codex Integrated Creative Designerへ制作を指示する。Adobe採用時は原本を実画像入力に使う。人物からの生成は適合素材なしを確認した案だけ。
+9. Codex DesignerがImageGenで完成広告を制作し、文字・数値・人物・業務・品質を自己確認する。各画像を個別に `03_batches/<creative-id>/<version>/candidate.png` へ保存する。
+10. 保存後に `scripts/register_codex_candidate.py` を実行する。DesignerはCandidateと自己確認結果をCCOへ返す。
+11. CCOが独立Reviewer（標準Codex）を選び、デザイン品質・最終QC・文字readbackを指示する。実際の担当と結果を記録し、Claudeの承認を必須条件にしない。[Review Workflow](review.md) に従う。
+12. CCOがレビュー結果・根拠・実画像を確認する。NGはCCOが原因工程を特定して修正を指示し、再提出物と再レビュー結果を確認する。
+13. 独立Reviewerの検証結果をCCOが評価し、CCOの正式納品承認JSONを保存した画像を `scripts/promote_creative.py` で案件の `05_delivery` へ昇格する。正式納品の承認者はCCO。画像は1枚ずつ独立したファイルで保存する。
+14. Human Final Approvalを受ける。
 
-## 求人ファイルだけのとき
-制作を止めず、以下だけをcreative assumptionとしてCodexが承認してよい。
-- 人物像
-- 服装
-- 背景
-- 構図
-- 色/トーン
-- カメラ距離
+## 専門Agentの呼び出しと接続状況
+Claude Agentの選択・作業指示・成果物の採否・修正指示はCodex CCOが行う。CLIやPythonは呼び出し・検証の実行手段であり、指揮系統を変更しない。
+一次入力は `creative-context.json` と承認済みのcompact成果物にする。raw sourceはFact疑義の確認に限定する。
 
-以下は推測禁止。
-- 給与
-- 待遇
-- 休日
-- 勤務時間
-- 資格
-- 経験年数
-- 数値実績
-- No.1/最短/保証等
+既存v5のPython実行設定はClaude 3役割。正式11役割の定義配置と自動実行の接続完了は別であり、未接続のschemaや承認JSON形式は [接続状況](../.claude/agents/README.md) を確認する。未実行の専門作業・レビューを完了扱いにしない。
 
-## 日本語テキスト
-重要テキストは画像生成AIに描かせない。
+## 文字確認と修正
+文字・数値はCreative Specで固定し、Codex Designerの目視、任意のlocal OCR、独立Reviewerのvisual readback、Codex CCOの最終目視で照合する。
+明確な文字・Fact誤りや未解消のReviewer failは正式納品を止める。CCOが原因と修正先を決め、局所不具合はImageGen editを優先する。詳細は [Revision Workflow](revision.md)。
 
-```text
-Creative Directorが文言を提案
-↓
-Codexが文言を確定
-↓
-画像AIが文字なし背景を生成
-↓
-Python overlay_rendererが日本語を描画
-↓
-完成画像 + *-copy.md
-```
+## ImageGenが使えない場合
+`IMAGEGEN_CAPABILITY_UNAVAILABLE` としてCCOへ報告する。Safe PythonはCCOが条件を確認して判断し、Direct API fallbackはユーザー明示承認がある場合だけ使う。標準制作の責任者はCodex Integrated Creative Designer。
 
-ReviewerとCodexは、画像とcopy.mdの両方を確認する。
-
-## Claudeの呼び出し
-PythonからClaudeを自動オーケストレーションしない。
-
-VSCode CodexがClaude Code CLIを直接利用する。
-
-役割定義:
-```text
-.claude/agents/recruitment-analyst.md
-.claude/agents/creative-director.md
-.claude/agents/creative-reviewer.md
-```
-
-## 画像生成
-画像生成方式は制作組織から独立させる。
-
-ローカル画像AIが不安定な場合、Phase 1のクリエイティブ品質検証を止めず、必要ならOpenAI Image APIへ切り替える。
-
-## Phase 1で使用しないもの
-- Production Director
-- Copy Director
-- Art Director
-- Prompt Designer
-- Python AI Orchestrator
-- 4段階の細分化Quality Gate
-- Schema中心のAI連携
-- 100枚量産前提の自動状態管理
-
-## 禁止
-- Codex CCOの二重化
-- ヒアリング不足だけで制作停止
-- 求人事実の推測補完
-- 日本語重要コピーを画像AI任せにする
-- CreatorとReviewerの兼任
-- Reviewerの点数だけでFinal PASS
-- ローカル画像AIの技術対応を、本来の画像品質検証より優先すること
+## 保存先
+正式な案件の `PROJECT_DIR` を使用する。候補は `03_batches`、レビュー記録は `04_project_review`、承認後の個別画像のみを `05_delivery` へ保存する。コピー文・承認JSON・生成記録は `04_project_review/delivery_records/<creative-id>/<version>/`、説明文やステータスは `04_project_review` 配下へ保存する。一覧画像は確認補助であり、個別画像の納品に代えない。

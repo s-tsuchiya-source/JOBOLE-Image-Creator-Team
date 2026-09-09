@@ -135,6 +135,12 @@ def _run_api_fallback(
     except CreativeSpecError as exc:
         raise SystemExit(f"Creative Spec validation failed: {exc}") from exc
 
+    if spec["asset_source"]["mode"] == "adobe_stock":
+        raise SystemExit(
+            "ADOBE_ASSET_INPUT_UNSUPPORTED: this API fallback does not attach source photos. "
+            "Use Codex ImageGen with the selected Adobe originals; do not generate replacement people."
+        )
+
     batch_dir = project_dir / "03_batches" / creative_id / version
     review_dir = project_dir / "04_project_review"
     batch_dir.mkdir(parents=True, exist_ok=True)

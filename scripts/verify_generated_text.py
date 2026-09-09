@@ -53,7 +53,8 @@ def main() -> None:
             "image": str(image_path),
             "creative_spec": str(spec_path),
             "local_ocr_is_advisory": True,
-            "claude_visual_readback_required": True,
+            "independent_reviewer_visual_readback_required": True,
+            "reviewer_selection_owner": "codex_cco",
             "codex_final_visual_check_required": True,
         }
     )

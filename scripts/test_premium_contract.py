@@ -16,6 +16,13 @@ def main() -> None:
         "version": "4.0",
         "mode": "premium_integrated",
         "benchmark_refs": ["R0001"],
+        "asset_source": {
+            "library_root": str(REPO_ROOT),
+            "search_status": "completed",
+            "mode": "generated",
+            "search_summary": "Synthetic contract fixture; no production images used.",
+            "fallback_reason": "Fixture has no suitable production assets.",
+        },
         "text_contract": [
             {
                 "id": "T001",

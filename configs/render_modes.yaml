@@ -11,7 +11,8 @@ render_modes:
     openai_api_key_required: false
     exact_text_contract_required: true
     local_ocr_optional: true
-    claude_visual_text_review_required: true
+    independent_visual_text_review_required: true
+    visual_reviewer_selection_owner: codex_cco
     codex_final_visual_text_review_required: true
     candidate_registration: scripts/register_codex_candidate.py
     silent_api_fallback_allowed: false
@@ -46,7 +47,7 @@ verification:
     layers:
       - codex_designer_self_check
       - local_ocr_when_available
-      - claude_visual_readback
+      - independent_reviewer_visual_readback
       - codex_cco_final_visual_check
     local_ocr_is_single_source_of_truth: false
     any_confirmed_fact_error_blocks_delivery: true

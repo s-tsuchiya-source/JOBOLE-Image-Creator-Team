@@ -59,13 +59,13 @@ Block対象:
 
 ## Generation Procedure
 1. Creative Specとbenchmarkを確認。
-2. 画像全体を一枚の広告として頭の中で構成。
-3. ImageGen capabilityで完成広告を生成。
-4. 自分で生成画像を視覚確認。
+2. `asset_source` の選定完了を確認。Adobe採用時は原本を目視して実画像入力に添付し、写真に合わせて広告を構成する。手順は [Adobe素材優先フロー](../../docs/adobe-material-first.md)。未選定・接続不可なら素材選定へ戻す。
+3. ImageGen capabilityで完成広告を制作。`adobe_stock` は原本の人物・写真を保持し、トリミング・配置で統合する。人物から生成するのは `generated` かつ適合素材なしの理由が記録済みの場合だけ。
+4. 自分で生成画像を視覚確認。Adobe使用時は原本と顔・服装・視線・人数・写真内容を比較する。
 5. required text / 数字 /職種の明確な誤りがあれば、その場で1回だけ編集または再生成。
 6. 合格候補を `03_batches/<creative-id>/<version>/candidate.png` に保存。
 7. `scripts/register_codex_candidate.py` を実行してCandidateを正式登録。
-8. Reviewerへ渡す。
+8. Candidateと自己確認結果をCodex CCOへ返す。CCOが制作担当から独立したReviewer（標準Codex）へレビューを指示する。
 
 ## Edit Before Regenerate
 完成度が高く局所不具合だけなら、全再生成よりImageGen editを優先する。
@@ -77,6 +77,7 @@ Block対象:
 - 手の破綻が局所的
 
 ただし編集で全体品質が落ちる場合は再生成する。
+Adobe採用時の再制作でも原本を再入力する。再生成を理由に生成人物へ置き換えない。
 
 ## Multi-Creative Diversity
 複数枚案件では、各Creativeの主訴求と視覚ルートを変える。
@@ -134,4 +135,4 @@ Block対象:
 - 生成前にコピーを再考しない。
 - 局所不具合はedit優先。
 - 同一文字エラーで無限再生成しない。
-- CCO/Reviewerが求めたroot causeだけ直す。
+- Reviewerの指摘を含め、CCOが指示したroot causeだけ直してCCOへ再提出する。

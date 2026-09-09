@@ -1,10 +1,16 @@
 # JOBOLE Image Creator Team
 
+2026-09-07に、添付 `jobole-agents-set.zip` の11件を `.claude/agents/` の正式定義へ反映し、同名旧版を置き換えました。[正式版一覧と接続状況](.claude/agents/README.md)を参照してください。以下は既存v5フローの説明です。新定義とのschema・出力形式の接続は未対応です。
+
 **Phase 1 Codex Native ImageGen v5**
 
-JOBOLE向け求人広告画像を、**VSCode Codex CCO + Codex Integrated Creative Designer + Claude 3専門家**で制作します。
+JOBOLE向け求人広告画像を、**最高責任者のCodex CCOが指揮するCodex Integrated Creative DesignerとClaude専門Agent**で制作します。正式なClaude Agentは11役割、以下の図は既存v5経路の基本構成です。
 
 ## 最重要方針
+Codex CCO自身が案件内容を理解し、各Claude Agentへの作業指示・成果物レビュー・修正指示・再レビュー・最終承認を行います。共通の指揮系統は [AGENTS.md](AGENTS.md)、各専門役割は [正式Agent一覧](.claude/agents/README.md) に定義しています。
+
+匿名化した求人条件・コピーのClaudeへの送信は、2026-09-07にユーザーが継続許可しています。共有する範囲と実行の判断はCodex CCOが担い、送信ごとのユーザー再承認は求めません。Claudeの専門レビュー結果をCCOが評価し、正式納品を承認します。
+
 標準制作ではPythonやDirect OpenAI Images APIを画像生成責任者にしません。
 
 ```text
@@ -14,14 +20,16 @@ Codex CCO
 ├─ Claude Recruitment Analyst
 ├─ Claude Creative Director
 ├─ Codex Integrated Creative Designer + ImageGen
-└─ Claude Creative Reviewer
+└─ Independent Creative Reviewer（標準Codex、CCOが選択）
 ↓
 Codex Final QA
 ↓
 Human Final Approval
 ```
 
-**人物・背景・装飾・日本語コピー・Typography・レイアウトまで、Codex Integrated Creative DesignerがImageGen capabilityで一体生成します。**
+**人物・写真はダウンロード済みAdobe素材を優先し、使える素材がない場合だけ人物から生成します。写真・装飾・日本語コピー・Typography・レイアウトは、Codex Integrated Creative DesignerがImageGen capabilityで一体制作します。**
+
+素材フォルダは `G:\共有ドライブ\ジョブオレチーム\ジョブオレチーム\JOBOLE-Image-Creator-Team\Adobe\_image`（`ADOBE_IMAGE_ROOT` で変更可能）。ユーザーが制作利用を許可済みです。各案で素材を目視選定し、採用パス・理由をCreative Specへ保存します。未検索・接続不可は素材なしと判定しません。[Adobe素材優先フロー](docs/adobe-material-first.md)を参照してください。
 
 標準 `codex_imagegen` 経路では、このプロジェクトへ `OPENAI_API_KEY` を設定することを必須にしません。
 ImageGen capabilityが利用できない場合も、勝手にAPI fallbackしません。
@@ -40,9 +48,13 @@ ImageGen capabilityが利用できない場合も、勝手にAPI fallbackしま�
 
 ## Responsibilities
 ### Codex CCO
+- 案件内容の理解・全体方針と作業順序の決定
+- 正式11役割から必要なClaude Agentを選び、具体的な作業を指示
+- 各Agentの成果物レビュー・修正指示・再レビュー
 - Project作成/保存Gate
 - Fact Gate
 - benchmark選定
+- Adobe素材選定（適合素材がない場合のみ人物生成へ進む）
 - Creative Spec承認
 - ImageGen capability Gate
 - Integrated Creative Designerへの制作委譲
@@ -76,7 +88,8 @@ Skill: `.codex/skills/recruitment-imagegen/SKILL.md`
 - 局所不具合はedit優先
 - Candidateを案件配下へ保存
 
-### Claude Creative Reviewer
+### Independent Creative Reviewer（標準Codex）
+制作担当から独立して検証し、結果をCCOへ返します。Claudeを担当に選ぶ場合も、正式納品の最終承認者はCCOです。
 - exact text readback
 - Fact/Hearing/Benchmark review
 - typography / ad impact
@@ -126,7 +139,7 @@ Candidate Registration
 ↓
 Optional OCR
 ↓
-Claude Reviewer
+Independent Reviewer（標準Codex）
 ↓
 Codex Final QA
 ↓
@@ -152,12 +165,16 @@ PROJECT_DIR/
 │     └─ generation-metadata.json
 ├─ 04_project_review/
 │  ├─ CR001-v001-text-verification.json
-│  └─ CR001-v001-final-approval.json
+│  ├─ CR001-v001-final-approval.json
+│  └─ delivery_records/CR001/v001/
+│     ├─ CR001-copy.md
+│     ├─ CR001-approval.json
+│     └─ CR001-generation-metadata.json
 └─ 05_delivery/
-   ├─ CR001.png
-   ├─ CR001-copy.md
-   └─ CR001-approval.json
+   └─ CR001.png
 ```
+
+`05_delivery` は完成画像のみ。コピー文・承認JSON・生成記録は `04_project_review/delivery_records/<creative-id>/<version>/` に保存します。説明文やステータス等の管理ファイルも `04_project_review` 配下に置きます。
 
 ## Candidate Registration
 Codex Designerが `candidate.png` を作った後だけ実行:
@@ -194,6 +211,7 @@ API_FALLBACK_ENABLED=true
 ```env
 PROJECTS_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/projects
 ORIGINAL_IMAGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/original_image
+ADOBE_IMAGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/Adobe/_image
 KNOWLEDGE_ROOT=G:/共有ドライブ/ジョブオレチーム/ジョブオレチーム/JOBOLE-Image-Creator-Team/knowledge
 CREATIVE_RENDER_MODE=codex_imagegen
 CODEX_IMAGEGEN_REQUIRED=true
@@ -206,6 +224,7 @@ python -m compileall scripts services
 python scripts/validate_system.py
 python scripts/test_premium_contract.py
 python scripts/test_codex_imagegen_contract.py
+python scripts/test_promote_creative.py
 ```
 
 Runtime確認:

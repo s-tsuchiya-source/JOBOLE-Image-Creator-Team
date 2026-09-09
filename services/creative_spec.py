@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+from services.production_assets import AssetSelectionError, asset_execution_brief, normalize_asset_source
+
 
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 ALLOWED_TEXT_ROLES = {"headline", "subcopy", "fact", "cta", "label"}
@@ -103,10 +105,16 @@ def normalize_creative_spec(data: dict, *, benchmark_max: int = 3, text_block_ma
     if generation_capability != "codex_imagegen":
         raise CreativeSpecError("execution.generation_capability must be codex_imagegen")
 
+    try:
+        asset_source = normalize_asset_source(data.get("asset_source"))
+    except AssetSelectionError as exc:
+        raise CreativeSpecError(str(exc)) from exc
+
     return {
         "version": _text(data.get("version")) or "5.0",
         "mode": "codex_integrated",
         "benchmark_refs": benchmark_refs,
+        "asset_source": asset_source,
         "strategy": data.get("strategy") if isinstance(data.get("strategy"), dict) else {},
         "text_contract": sorted(blocks, key=lambda item: item["priority"]),
         "design_direction": {
@@ -169,6 +177,10 @@ def build_integrated_image_prompt(spec: dict, *, width: int, height: int) -> str
 
     benchmark_text = ", ".join(spec.get("benchmark_refs", [])) or "none"
     forbidden = ", ".join(spec.get("forbidden_extra_text", [])) or "none"
+    try:
+        asset_brief = asset_execution_brief(normalize_asset_source(spec.get("asset_source")))
+    except AssetSelectionError as exc:
+        raise CreativeSpecError(str(exc)) from exc
 
     return f"""You are the Codex Integrated Creative Designer using the available ImageGen capability.
 Create a finished Japanese recruitment advertising banner, not a mockup, not a background asset, and not a template preview.
@@ -187,6 +199,9 @@ OUTPUT
 BENCHMARK
 - Reference IDs selected by the CCO: {benchmark_text}.
 - Follow their quality level and visual grammar without copying a specific sample literally.
+
+PRODUCTION MATERIALS (apply these constraints to the creative direction below)
+{asset_brief}
 
 VISUAL DIRECTION
 - visual style: {direction.get('visual_style') or 'premium Japanese recruitment advertising'}

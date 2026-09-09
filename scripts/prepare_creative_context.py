@@ -24,6 +24,7 @@ load_dotenv(REPO_ROOT / ".env", override=True)
 
 from input_loader import extract_source_text, list_files, normalize_project_inputs
 from load_project import load_environment, resolve_project_dir
+from services.production_assets import adobe_catalog, resolve_adobe_root
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -401,6 +402,15 @@ def main() -> None:
     )
 
     output_spec = _resolve_output_spec(hearing_sources)
+    asset_library = adobe_catalog(resolve_adobe_root())
+    asset_dir = normalized_dir / "adobe_library"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    asset_catalog_path = asset_dir / "asset-catalog.json"
+    asset_catalog_path.write_text(json.dumps(asset_library, ensure_ascii=False, indent=2), encoding="utf-8-sig")
+    asset_sheets = _build_contact_sheets(
+        [dict(item, reference_id=item["asset_id"]) for item in asset_library["items"] if item["readable"]],
+        asset_dir,
+    )
     context = {
         "project": {
             "project_id": args.project_id,
@@ -418,6 +428,18 @@ def main() -> None:
         "hearings": hearing_sources,
         "supplementary_text": _supplementary_text(project_dir),
         "resolved_output_spec": output_spec,
+        "production_asset_library": {
+            **{key: value for key, value in asset_library.items() if key != "items"},
+            "catalog": str(asset_catalog_path),
+            "contact_sheets": asset_sheets,
+            "selection_rule": (
+                "Inspect Adobe contact sheets and relevant originals before approving each creative. "
+                "Use suitable Adobe assets as actual image inputs. Only generate people when a completed "
+                "visual search finds no suitable assets; record the reason in creative_spec.asset_source. "
+                "Unavailable or partially unreadable libraries are not a no-match result. "
+                "Filename keyword misses alone do not establish that no suitable photo exists."
+            ),
+        },
         "reference_library": {
             "root": str(reference_root),
             "count": len(catalog),
@@ -447,7 +469,9 @@ def main() -> None:
     print(f"REFERENCE_COUNT={len(catalog)}")
     print(f"REFERENCE_CONTACT_SHEETS={len(contact_sheets)}")
     print(f"REFERENCE_DETERMINISTIC_SHORTLIST={len(deterministic_shortlist)}")
-    print("NEXT=Codex CCO benchmark selection -> Recruitment Analyst")
+    print(f"ADOBE_ASSET_STATUS={asset_library['status']}")
+    print(f"ADOBE_ASSET_COUNT={asset_library['count']}")
+    print("NEXT=Fact/benchmark -> Adobe visual selection -> Creative Spec approval")
 
 
 if __name__ == "__main__":
